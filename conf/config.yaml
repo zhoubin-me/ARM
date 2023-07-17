@@ -9,7 +9,7 @@ rlbench:
 
 replay:
     batch_size: 128
-    timesteps: 1
+    timesteps: 16
     prioritisation: True
     use_disk: False
     path: '/tmp/arm/replay'  # Only used when use_disk is True.

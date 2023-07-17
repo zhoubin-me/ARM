@@ -25,7 +25,7 @@ from yarr.runners.env_runner import EnvRunner
 from yarr.runners.pytorch_train_runner import PyTorchTrainRunner
 from yarr.utils.stat_accumulator import SimpleAccumulator
 
-from arm import arm, c2farm, lpr, qte
+from arm import arm, c2farm, lpr, qte, c2fmae
 from arm.baselines import bc, td3, dac, sac
 from arm.custom_rlbench_env import CustomRLBenchEnv
 from pyrep.const import RenderMode
@@ -122,6 +122,27 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
             agent = qte.launch_utils.create_agent(
                 cfg, env, cfg.rlbench.scene_bounds,
                 cfg.rlbench.camera_resolution)
+
+    elif cfg.method.name == 'MAE':
+        explore_replay = c2fmae.launch_utils.create_replay(
+            cfg.replay.batch_size, cfg.replay.timesteps,
+            cfg.replay.prioritisation,
+            replay_path if cfg.replay.use_disk else None, cams, env,
+            cfg.method.voxel_sizes)
+        replays = [explore_replay]
+
+        c2fmae.launch_utils.fill_replay(
+            explore_replay, cfg.rlbench.task, env, cfg.rlbench.demos,
+            cfg.method.demo_augmentation, cfg.method.demo_augmentation_every_n,
+            cams, cfg.rlbench.scene_bounds,
+            cfg.method.voxel_sizes, cfg.method.bounds_offset,
+            cfg.method.rotation_resolution, cfg.method.crop_augmentation)
+
+        import ipdb; ipdb.set_trace()
+        agent = c2fmae.launch_utils.create_agent(
+            cfg, env, cfg.rlbench.scene_bounds,
+            cfg.rlbench.camera_resolution)
+
 
     elif cfg.method.name == 'LPR':
         explore_replay = lpr.launch_utils.create_replay(
