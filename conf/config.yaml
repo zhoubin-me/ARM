@@ -1,7 +1,7 @@
 rlbench:
     task: take_lid_off_saucepan
     demos: 10
-    demo_path: /my/demo/path
+    demo_path: /home/bzhou/ARM/dset
     episode_length: 10
     cameras: [front]
     camera_resolution: [128, 128]
@@ -23,10 +23,12 @@ framework:
     transitions_before_train: 200
     tensorboard_logging: True
     csv_logging: True
+    wandb_logging: True
+    project_name: "c2farm"
     training_iterations: 40000
     gpu: 0
     env_gpu: 0
-    logdir: '/tmp/arm_test/'
+    logdir: './arm_test/'
     seeds: 1
 
 defaults:

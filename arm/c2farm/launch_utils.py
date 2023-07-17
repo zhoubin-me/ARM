@@ -220,7 +220,6 @@ def create_agent(cfg: DictConfig, env, depth_0bounds=None, cam_resolution=None):
             low_dim_size=env.low_dim_state_len,
             include_prev_layer=include_prev_layer and depth > 0)
 
-
         qattention_agent = QAttentionAgent(
             layer=depth,
             coordinate_bounds=depth_0bounds,

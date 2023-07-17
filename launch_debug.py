@@ -297,38 +297,38 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
         with open(os.path.join(logdir, 'action_min_max.pkl'), 'wb') as f:
             pickle.dump(action_min_max, f)
 
-    env_runner = EnvRunner(
-        train_env=env, agent=agent, train_replay_buffer=explore_replay,
-        num_train_envs=train_envs,
-        num_eval_envs=cfg.framework.eval_envs,
-        episodes=99999,
-        episode_length=cfg.rlbench.episode_length,
-        stat_accumulator=stat_accum,
-        weightsdir=weightsdir,
-        env_device=env_device,
-        rollout_generator=rg)
+    # env_runner = EnvRunner(
+    #     train_env=env, agent=agent, train_replay_buffer=explore_replay,
+    #     num_train_envs=train_envs,
+    #     num_eval_envs=cfg.framework.eval_envs,
+    #     episodes=99999,
+    #     episode_length=cfg.rlbench.episode_length,
+    #     stat_accumulator=stat_accum,
+    #     weightsdir=weightsdir,
+    #     env_device=env_device,
+    #     rollout_generator=rg)
 
-    train_runner = PyTorchTrainRunner(
-        agent, env_runner,
-        wrapped_replays, train_device, replay_split, stat_accum,
-        iterations=cfg.framework.training_iterations,
-        save_freq=cfg.framework.save_freq,
-        log_freq=cfg.framework.log_freq,
-        logdir=logdir,
-        weightsdir=weightsdir,
-        replay_ratio=replay_ratio,
-        transitions_before_train=cfg.framework.transitions_before_train,
-        tensorboard_logging=cfg.framework.tensorboard_logging,
-        wandb_logging=cfg.framework.wandb_logging,
-        project_name=cfg.framework.project_name,
-        csv_logging=cfg.framework.csv_logging)
-    train_runner.start()
-    del train_runner
-    del env_runner
-    del agent
-    del env
-    gc.collect()
-    torch.cuda.empty_cache()
+    # train_runner = PyTorchTrainRunner(
+    #     agent, env_runner,
+    #     wrapped_replays, train_device, replay_split, stat_accum,
+    #     iterations=cfg.framework.training_iterations,
+    #     save_freq=cfg.framework.save_freq,
+    #     log_freq=cfg.framework.log_freq,
+    #     logdir=logdir,
+    #     weightsdir=weightsdir,
+    #     replay_ratio=replay_ratio,
+    #     transitions_before_train=cfg.framework.transitions_before_train,
+    #     tensorboard_logging=cfg.framework.tensorboard_logging,
+    #     wandb_logging=cfg.framework.wandb_logging,
+    #     project_name=cfg.framework.project_name,
+    #     csv_logging=cfg.framework.csv_logging)
+    # train_runner.start()
+    # del train_runner
+    # del env_runner
+    # del agent
+    # del env
+    # gc.collect()
+    # torch.cuda.empty_cache()
 
 
 @hydra.main(config_name='config', config_path='conf')
@@ -364,6 +364,8 @@ def main(cfg: DictConfig) -> None:
         episode_length=cfg.rlbench.episode_length, headless=True,
         time_in_state=True)
 
+    # print(env.observation_elements)
+    # print(env.low_dim_state_len)
     cwd = os.getcwd()
     logging.info('CWD:' + os.getcwd())
     existing_seeds = len(list(filter(lambda x: 'seed' in x, os.listdir(cwd))))
