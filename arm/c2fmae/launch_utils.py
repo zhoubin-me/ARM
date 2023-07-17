@@ -219,9 +219,6 @@ def create_agent(cfg: DictConfig, env, depth_0bounds=None, cam_resolution=None):
             activation=cfg.method.activation,
             low_dim_size=env.low_dim_state_len,
             include_prev_layer=include_prev_layer and depth > 0)
-        
-
-
 
         qattention_agent = QAttentionAgent(
             layer=depth,
@@ -247,7 +244,7 @@ def create_agent(cfg: DictConfig, env, depth_0bounds=None, cam_resolution=None):
             gamma=0.99
         )
         qattention_agents.append(qattention_agent)
-
+    
     rotation_agent = QAttentionStackAgent(
         qattention_agents=qattention_agents,
         rotation_resolution=cfg.method.rotation_resolution,

@@ -138,7 +138,6 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
             cfg.method.voxel_sizes, cfg.method.bounds_offset,
             cfg.method.rotation_resolution, cfg.method.crop_augmentation)
 
-        import ipdb; ipdb.set_trace()
         agent = c2fmae.launch_utils.create_agent(
             cfg, env, cfg.rlbench.scene_bounds,
             cfg.rlbench.camera_resolution)
