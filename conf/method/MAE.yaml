@@ -1,6 +1,6 @@
 # @package _group_
 
-name: 'C2FARM'
+name: 'MAE'
 
 lr: 0.0005
 tau: 0.0025

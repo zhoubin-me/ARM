@@ -129,10 +129,10 @@ class Qattention3DNet(nn.Module):
     def forward(self, ins, proprio, prev_layer_voxel_grid):
         b, _, d, h, w = ins.shape
         x = self._input_preprocess(ins)
-        print(ins.shape, x.shape)
+        # print(ins.shape, x.shape)
 
         if self._include_prev_layer:
-            print('prev', prev_layer_voxel_grid.shape)
+            print('previous -->', prev_layer_voxel_grid.shape)
             y = self._input_preprocess_prev_layer(prev_layer_voxel_grid)
             x = torch.cat([x, y], dim=1)
 
@@ -141,7 +141,7 @@ class Qattention3DNet(nn.Module):
             p = p.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).repeat(
                 1, 1, d, h, w)
             x = torch.cat([x, p], dim=1)
-
+        
         d0 = self._down0(x)
         ss0 = self._ss0(d0)
         maxp0 = self._global_maxp(d0).view(b, -1)
@@ -197,4 +197,7 @@ class Qattention3DNet(nn.Module):
                 'u3': u3.mean(-1).mean(-1).mean(-1),
             })
 
+        # print(trans.shape)
+        # if rot_and_grip_out is not None:
+        #     print("rot -->", rot_and_grip_out.shape)
         return trans, rot_and_grip_out

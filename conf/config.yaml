@@ -1,7 +1,7 @@
 rlbench:
     task: take_lid_off_saucepan
     demos: 10
-    demo_path: /home/bzhou/ARM/dset
+    demo_path: /home/bzhou/Repos/.local/RLBench/tools/dset
     episode_length: 10
     cameras: [front]
     camera_resolution: [128, 128]
