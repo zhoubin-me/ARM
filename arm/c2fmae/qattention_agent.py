@@ -13,8 +13,8 @@ from yarr.agents.agent import Agent, ActResult, ScalarSummary, \
 
 from arm import utils
 from arm.utils import visualise_voxel, stack_on_channel
-from arm.c2fmae.voxel_grid import VoxelGrid
-
+# from arm.c2fmae.voxel_grid import VoxelGrid
+from arm.c2fmae.voxel_grid_vit import VoxelGrid
 NAME = 'QAttentionAgent'
 REPLAY_BETA = 1.0
 
@@ -55,8 +55,21 @@ class QFunction(nn.Module):
                  q_rot[:, 2:3].argmax(-1),
                  q_rot_grip[:, -2:].argmax(-1, keepdim=True)], -1)
         return coords, rot_and_grip_indicies
+    def forward(self, x, proprio, pcd, bounds=None, latent=None):
+        rgb = x[0][0]
+        pcd = x[0][1]
+        if rgb.shape[1] != 128:
+            rgb = F.upsample(rgb, (128, 128))
+            pcd = F.upsample(pcd, (128, 128))
 
-    def forward(self, x, proprio, pcd,
+        rgb = rgb.permute(0, 2, 3, 1)
+        pcd = pcd.permute(0, 2, 3, 1)
+
+        voxel_grid, rot_and_grip_out = self._qnet(rgb, pcd, proprio, pcd, None, bounds)
+        return voxel_grid, rot_and_grip_out, voxel_grid
+
+
+    def forward_(self, x, proprio, pcd,
                 bounds=None, latent=None):
         # x will be list of list (list of [rgb, pcd])
         b = x[0][0].shape[0]
@@ -68,14 +81,22 @@ class QFunction(nn.Module):
         flat_imag_features = torch.cat(
             [p.permute(0, 2, 3, 1).reshape(b, -1, feat_size) for p in
              image_features], 1)
-
+        
         voxel_grid = self._voxel_grid.coords_to_bounding_voxel_grid(
             pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
-
         # Swap to channels fist
         voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
-
         q_trans, rot_and_grip_q = self._qnet(voxel_grid, proprio, latent)
+
+        # print(q_trans.shape, voxel_grid.shape, flat_imag_features.shape)
+        # print(pcd_flat.shape, bounds)
+        # q_trans: B x 1 x N x N x N
+        # rot_and_grip_q: B x 218 or None
+        # flat_imag_features: B x (H W) x 3
+        # pcd_flat: B x (H W) x 3
+        # voxel_grid: B x 10 x N x N x N
+        # bounds: 6
+
         return q_trans, rot_and_grip_q, voxel_grid
 
     def latents(self):
@@ -148,6 +169,7 @@ class QAttentionAgent(Agent):
             max_num_coords=np.prod(self._image_resolution) * self._num_cameras,
         )
         self._vox_grid = vox_grid
+        self._unet3d.set_vox_grid(vox_grid)
 
         self._q = QFunction(self._unet3d, vox_grid, self._bounds_offset,
                             self._rotation_resolution,
@@ -291,7 +313,6 @@ class QAttentionAgent(Agent):
         terminal = replay_sample['terminal'].float()
 
         obs, obs_tp1, pcd, pcd_tp1 = self._preprocess_inputs(replay_sample)
-
         q, q_rot_grip, voxel_grid = self._q(
             obs, proprio, pcd, bounds,
             replay_sample.get('prev_layer_voxel_grid', None))
@@ -366,8 +387,8 @@ class QAttentionAgent(Agent):
 
         return {
             'priority': priority + prev_priority,
-            'prev_layer_voxel_grid': voxel_grid,
-            'prev_layer_voxel_grid_tp1': voxel_grid_tp1,
+            # 'prev_layer_voxel_grid': voxel_grid,
+            # 'prev_layer_voxel_grid_tp1': voxel_grid_tp1,
         }
 
     def act(self, step: int, observation: dict,
@@ -451,14 +472,14 @@ class QAttentionAgent(Agent):
             summaries.extend([
                 ImageSummary('%s/crops/%s' % (self._name, name), crops)])
 
-        for tag, param in self._q.named_parameters():
-            assert not torch.isnan(param.grad.abs() <= 1.0).all()
-            summaries.append(
-                HistogramSummary('%s/gradient/%s' % (self._name, tag),
-                                 param.grad))
-            summaries.append(
-                HistogramSummary('%s/weight/%s' % (self._name, tag),
-                                 param.data))
+        # for tag, param in self._q.named_parameters():
+            # assert not torch.isnan(param.grad.abs() <= 1.0).all()
+            # summaries.append(
+            #     HistogramSummary('%s/gradient/%s' % (self._name, tag),
+            #                      param.grad))
+            # summaries.append(
+            #     HistogramSummary('%s/weight/%s' % (self._name, tag),
+            #                      param.data))
 
         for name, t in self._q.latents().items():
             summaries.append(

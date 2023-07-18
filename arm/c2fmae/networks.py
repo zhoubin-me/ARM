@@ -129,10 +129,8 @@ class Qattention3DNet(nn.Module):
     def forward(self, ins, proprio, prev_layer_voxel_grid):
         b, _, d, h, w = ins.shape
         x = self._input_preprocess(ins)
-        # print(ins.shape, x.shape)
 
         if self._include_prev_layer:
-            print('previous -->', prev_layer_voxel_grid.shape)
             y = self._input_preprocess_prev_layer(prev_layer_voxel_grid)
             x = torch.cat([x, y], dim=1)
 

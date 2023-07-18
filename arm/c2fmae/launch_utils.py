@@ -17,6 +17,7 @@ from arm.preprocess_agent import PreprocessAgent
 from arm.c2fmae.networks import Qattention3DNet
 from arm.c2fmae.qattention_agent import QAttentionAgent
 from arm.c2fmae.qattention_stack_agent import QAttentionStackAgent
+from arm.c2fmae.vit import QattentionVIT
 
 REWARD_SCALE = 100.0
 
@@ -208,17 +209,35 @@ def create_agent(cfg: DictConfig, env, depth_0bounds=None, cam_resolution=None):
     qattention_agents = []
     for depth, vox_size in enumerate(cfg.method.voxel_sizes):
         last = depth == len(cfg.method.voxel_sizes) - 1
-        unet3d = Qattention3DNet(
-            in_channels=VOXEL_FEATS + 3 + 1 + 3,
-            out_channels=1,
-            voxel_size=vox_size,
-            out_dense=((num_rotation_classes * 3) + 2) if last else 0,
-            kernels=LATENT_SIZE,
-            norm=None if 'None' in cfg.method.norm else cfg.method.norm,
+        # unet3d = Qattention3DNet(
+        #     in_channels=VOXEL_FEATS + 3 + 1 + 3,
+        #     out_channels=1,
+        #     voxel_size=vox_size,
+        #     out_dense=((num_rotation_classes * 3) + 2) if last else 0,
+        #     kernels=LATENT_SIZE,
+        #     norm=None if 'None' in cfg.method.norm else cfg.method.norm,
+        #     dense_feats=128,
+        #     activation=cfg.method.activation,
+        #     low_dim_size=env.low_dim_state_len,
+        #     include_prev_layer=include_prev_layer and depth > 0)
+        unet3d = QattentionVIT(
+            img_size=128,
+            patch_size=8,
+            in_chans=7,
+            out_dense=(num_rotation_classes * 3 + 2) if last else 0,
+            embed_dim=64,
+            depth=4,
+            kernels=64,
+            num_heads=4,
             dense_feats=128,
-            activation=cfg.method.activation,
             low_dim_size=env.low_dim_state_len,
-            include_prev_layer=include_prev_layer and depth > 0)
+            activation='lrelu',
+            include_prev_layer=False,
+            post_proc_method='inception',
+            spatial_features=True,
+            unet_features=True,
+            pos_embed_3d_type='fourier',
+        )
 
         qattention_agent = QAttentionAgent(
             layer=depth,
@@ -235,7 +254,7 @@ def create_agent(cfg: DictConfig, env, depth_0bounds=None, cam_resolution=None):
             include_low_dim_state=True,
             image_resolution=cam_resolution,
             batch_size=cfg.replay.batch_size,
-            voxel_feature_size=3,
+            voxel_feature_size=64,
             exploration_strategy=cfg.method.exploration_strategy,
             lambda_weight_l2=cfg.method.lambda_weight_l2,
             num_rotation_classes=num_rotation_classes,

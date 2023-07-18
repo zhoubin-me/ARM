@@ -783,3 +783,20 @@ def mae_vit_base_patch16(**kwargs):
         **kwargs,
     )
     return model
+
+if __name__ == '__main__':
+    model = MaskedAutoencoderViT(
+        patch_size=8,
+        embed_dim=768,
+        img_size=128,
+        depth=4,
+        num_heads=4,
+        t_patch_size=2,
+        num_frames=16,
+        mlp_ratio=4,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),
+    )
+    img = torch.rand(7, 3, 16, 128, 128)
+    latent, mask, id_restore = model.forward_encoder(img, 0.75)
+    pred = model.forward_decoder(latent, id_restore) 
+    print(latent.shape, mask.shape, pred.shape)
