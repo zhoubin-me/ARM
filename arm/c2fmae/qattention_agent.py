@@ -63,6 +63,9 @@ class QFunction(nn.Module):
         pcd_flat = torch.cat(
             [p.permute(0, 2, 3, 1).reshape(b, -1, 3) for p in pcd], 1)
 
+        # image_feat x[0][0]: B x 3 x H x W
+        # pcd_feat x[0][1]: B x 3 x H x W
+        # print(x[0][0].shape, x[0][1].shape)
         image_features = [xx[0] for xx in x]
         feat_size = image_features[0].shape[1]
         flat_imag_features = torch.cat(
@@ -76,6 +79,18 @@ class QFunction(nn.Module):
         voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
 
         q_trans, rot_and_grip_q = self._qnet(voxel_grid, proprio, latent)
+        # flat_imag_features: B x (H W) x 3
+        # pcd_flat: B x (H W) x 3
+        # bounds: 1 x 6
+        # voxel_grid: B x 10 x 16 x 16 x 16
+        # q_trans: B x 1 x 16 x 16 x 16
+        # rot_and_grip_q: B x 218
+
+        # print(voxel_grid.shape, q_trans.shape, flat_imag_features.shape, pcd_flat.shape)
+        # if latent is not None:
+        #     print('Latent -->', latent.shape)
+        # if rot_and_grip_q is not None:
+        #     print('Rot -->', rot_and_grip_q.shape)
         return q_trans, rot_and_grip_q, voxel_grid
 
     def latents(self):
