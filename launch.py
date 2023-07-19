@@ -40,7 +40,7 @@ def _create_obs_config(camera_names: List[str], camera_resolution: List[int]):
         rgb=True,
         point_cloud=True,
         mask=False,
-        depth=False,
+        depth=True,
         image_size=camera_resolution,
         render_mode=RenderMode.OPENGL)
 
@@ -50,6 +50,7 @@ def _create_obs_config(camera_names: List[str], camera_resolution: List[int]):
         kwargs[n] = used_cams
         cam_obs.append('%s_rgb' % n)
         cam_obs.append('%s_pointcloud' % n)
+        cam_obs.append('%s_depth' % n)
 
     # Some of these obs are only used for keypoint detection.
     obs_config = ObservationConfig(

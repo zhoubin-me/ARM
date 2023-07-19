@@ -8,6 +8,7 @@ from tensorboard.plugins.mesh import summary_v2 as mesh_summary
 from einops import rearrange
 from dataclasses import dataclass
 import numpy as np
+from kornia.geometry.depth import depth_to_3d
 
 @dataclass
 class PointCloud:
@@ -52,11 +53,18 @@ class PreprocessAgent(Agent):
         demo_proportion = demo_f.mean()
         tile = lambda x: torch.squeeze(
             torch.cat(x.split(1, dim=1), dim=-1), dim=1)
-        rgb = self._replay_sample['front_rgb'][0][0]
-        rgb = ((rgb + 1.0) / 2.0 * 255.0).to(torch.uint8)
-        pcd = self._replay_sample['front_point_cloud'][0][0]
-        rgb = rearrange(rgb, 'c h w -> (h w) c')
-        pcd = rearrange(pcd, 'c h w -> (h w) c')
+        for cam_name in ['front', 'wrist']:
+            cam_name_rgb = cam_name + '_rgb'
+            if cam_name_rgb not in self._replay_sample: continue
+            rgb = self._replay_sample[f'{cam_name}_rgb'][0][0]
+            rgb = ((rgb + 1.0) / 2.0 * 255.0).to(torch.uint8)
+            pcd = self._replay_sample[f'{cam_name}_point_cloud'][0][0]
+            depth = self._replay_sample[f'{cam_name}_depth'][0][:1]
+            camera_matrix = self._replay_sample[f'{cam_name}_camera_intrinsics'][0]
+            pcd_from_depth = depth_to_3d(depth, camera_matrix).squeeze(0)
+            rgb = rearrange(rgb, 'c h w -> (h w) c')
+            pcd = rearrange(pcd_from_depth, 'c h w -> (h w) c')
+            break
         sums = [
             PointCloud(rgb=rgb, pcd=pcd, name=f"{prefix}/point_cloud"),
             ScalarSummary('%s/demo_proportion' % prefix, demo_proportion),

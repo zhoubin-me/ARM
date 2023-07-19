@@ -3,7 +3,7 @@ rlbench:
     demos: 10
     demo_path: /home/bzhou/Repos/.local/RLBench/tools/dset
     episode_length: 10
-    cameras: [front]
+    cameras: [wrist]
     camera_resolution: [128, 128]
     scene_bounds: [-0.3, -0.5, 0.6, 0.7, 0.5, 1.6]
 
