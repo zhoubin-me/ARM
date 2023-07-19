@@ -318,6 +318,31 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
         with open(os.path.join(logdir, 'action_min_max.pkl'), 'wb') as f:
             pickle.dump(action_min_max, f)
 
+    from kornia.geometry.depth import depth_to_3d
+    from einops import rearrange
+    data = explore_replay.sample_transition_batch()
+    pcd = data['wrist_point_cloud'][:, 0]
+    depth = data['wrist_depth'][:, 0]
+    camera_intr = data['wrist_camera_intrinsics'][:, 0]
+    camera_extr = data['wrist_camera_extrinsics'][:, 0]
+    pcd_depth = depth_to_3d(torch.from_numpy(depth), torch.from_numpy(camera_intr))
+    pcd = torch.from_numpy(pcd)
+
+    pcd = rearrange(pcd, 'b c h w -> b c (h w)')
+    pcd = torch.cat((pcd, torch.ones(64, 1, 16384)), dim=1)
+
+    pcd_depth = rearrange(pcd_depth, 'b c h w -> b c (h w)')
+    pcd_depth = torch.cat((pcd_depth, torch.ones(64, 1, 16384)), dim=1)
+
+
+    camera_extr = torch.from_numpy(camera_extr)
+    yy = torch.bmm(camera_extr, pcd)
+    offset = rearrange(yy[:, :3] - pcd_depth[:, :3], 'b c (h w) -> b h w c', h=128, w=128)
+    
+    pcd_depth2 = torch.bmm(torch.inverse(camera_extr), pcd_depth)
+    print(pcd_depth2.shape, pcd.shape, (pcd_depth2[:, :3] - pcd[:, :3]).shape)
+    offset2 = rearrange(pcd_depth2[:, :3] - pcd[:, :3], 'b c (h w) -> b h w c', h=128, w=128)
+    
     import ipdb; ipdb.set_trace()
     # env_runner = EnvRunner(
     #     train_env=env, agent=agent, train_replay_buffer=explore_replay,

@@ -61,12 +61,14 @@ class PreprocessAgent(Agent):
             rgb = ((rgb + 1.0) / 2.0 * 255.0).to(torch.uint8)
             pcd = self._replay_sample[f'{cam_name}_point_cloud'][0][0]
             depth = self._replay_sample[f'{cam_name}_depth'][0][:1]
-            camera_matrix = self._replay_sample[f'{cam_name}_camera_intrinsics'][0]
-            pcd_depth = depth_to_3d(depth, camera_matrix, normalize_points=False).squeeze(0)
+
+            camera_intr = self._replay_sample[f'{cam_name}_camera_intrinsics'][0]
+            # camera_extr = self._replay_sample[f'{cam_name}_camera_extrinsics'][0]
+            pcd_depth = depth_to_3d(depth, camera_intr, normalize_points=False).squeeze(0)
             rgb = rearrange(rgb, 'c h w -> (h w) c')
             pcd = rearrange(pcd, 'c h w -> (h w) c')
             pcd_depth = rearrange(pcd_depth, 'c h w -> (h w) c')
-            break
+
         sums = [
             PointCloud(rgb=rgb, pcd=pcd, pcd_depth=pcd_depth, name=f"{prefix}/point_cloud"),
             ScalarSummary('%s/demo_proportion' % prefix, demo_proportion),
