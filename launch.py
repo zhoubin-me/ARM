@@ -41,6 +41,7 @@ def _create_obs_config(camera_names: List[str], camera_resolution: List[int]):
         point_cloud=True,
         mask=False,
         depth=True,
+        depth_in_meters=True,
         image_size=camera_resolution,
         render_mode=RenderMode.OPENGL)
 
@@ -367,7 +368,9 @@ def main(cfg: DictConfig) -> None:
     if cfg.method.name == 'PathARM':
         arm_action_mode = TrajectoryActionMode(cfg.method.trajectory_points)
     else:
+        # arm_action_mode = EndEffectorPoseViaPlanning(absolute_mode=False, frame='end effector')
         arm_action_mode = EndEffectorPoseViaPlanning()
+
     action_mode = MoveArmThenGripper(arm_action_mode, gripper_mode)
 
     task_files = [t.replace('.py', '') for t in os.listdir(task.TASKS_PATH)

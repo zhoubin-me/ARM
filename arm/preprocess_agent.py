@@ -22,6 +22,8 @@ class PreprocessAgent(Agent):
     def __init__(self,
                  pose_agent: Agent):
         self._pose_agent = pose_agent
+        self._depth_near = 0.01
+        self._depth_far = 4.5
 
     def build(self, training: bool, device: torch.device = None):
         self._pose_agent.build(training, device)
@@ -29,9 +31,40 @@ class PreprocessAgent(Agent):
     def _norm_rgb_(self, x):
         return (x.float() / 255.0) * 2.0 - 1.0
 
+    def calc_pcd_from_depth(self, replay_sample: dict) -> dict:
+        came_name = 'wrist'
+        # pcd = replay_sample['wrist_point_cloud'][:, 0]
+        depth = replay_sample[f'{came_name}_depth'][:, 0]
+        camera_intr = replay_sample[f'{came_name}_camera_intrinsics'][:, 0]
+        camera_extr = replay_sample[f'{came_name}_camera_extrinsics'][:, 0]
+
+        pcd_depth = depth_to_3d(depth, camera_intr)
+        b, _, h, w = pcd_depth.shape
+        pcd_depth = rearrange(pcd_depth, 'b c h w -> b c (h w)')
+        pcd_depth = torch.cat((pcd_depth, torch.ones(b, 1, h * w).to(depth)), dim=1)
+        pcd_depth = torch.bmm(torch.inverse(camera_extr), pcd_depth)
+        pcd_depth = rearrange(pcd_depth[:, :3], 'b c (h w) -> b h w c', h=h, w=w)
+        replay_sample[f'{came_name}_point_cloud'] = pcd_depth.unsqueeze(1).float()
+
+        if 'tp1' in replay_sample:
+            depth_tp1 = replay_sample[f'{came_name}_depth_tp1'][:, 0]
+            camera_intr_tp1 = replay_sample[f'{came_name}_camera_intrinsics_tp1'][:, 0]
+            camera_extr_tp1 = replay_sample[f'{came_name}_camera_extrinsics_tp1'][:, 0]
+
+            pcd_depth_tp1 = depth_to_3d(depth_tp1, camera_intr_tp1)
+            pcd_depth_tp1 = rearrange(pcd_depth_tp1, 'b c h w -> b c (h w)')
+            pcd_depth_tp1 = torch.cat((pcd_depth_tp1, torch.ones(b, 1, h * w).to(depth)), dim=1)
+            pcd_depth_tp1 = torch.bmm(torch.inverse(camera_extr_tp1), pcd_depth_tp1)
+            pcd_depth_tp1 = rearrange(pcd_depth_tp1[:, :3], 'b c (h w) -> b h w c', h=h, w=w)
+            replay_sample[f'{came_name}_point_cloud_tp1'] = pcd_depth_tp1.unsqueeze(1).float()
+            
+        return replay_sample
+    
     def update(self, step: int, replay_sample: dict) -> dict:
         # Samples are (B, N, ...) where N is number of buffers/tasks. This is a single task setup, so 0 index.
         replay_sample = {k: v[:, 0] for k, v in replay_sample.items()}
+        replay_sample = self.calc_pcd_from_depth(replay_sample)
+
         for k, v in replay_sample.items():
             if 'rgb' in k:
                 replay_sample[k] = self._norm_rgb_(v)
@@ -41,6 +74,7 @@ class PreprocessAgent(Agent):
     def act(self, step: int, observation: dict,
             deterministic=False) -> ActResult:
         # observation = {k: torch.tensor(v) for k, v in observation.items()}
+        observation = self.calc_pcd_from_depth(observation)
         for k, v in observation.items():
             if 'rgb' in k:
                 observation[k] = self._norm_rgb_(v)
@@ -68,6 +102,7 @@ class PreprocessAgent(Agent):
             rgb = rearrange(rgb, 'c h w -> (h w) c')
             pcd = rearrange(pcd, 'c h w -> (h w) c')
             pcd_depth = rearrange(pcd_depth, 'c h w -> (h w) c')
+            break
 
         sums = [
             PointCloud(rgb=rgb, pcd=pcd, pcd_depth=pcd_depth, name=f"{prefix}/point_cloud"),
