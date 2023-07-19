@@ -14,6 +14,7 @@ from kornia.geometry.depth import depth_to_3d
 class PointCloud:
     rgb: Any = None
     pcd: Any = None
+    pcd_depth: Any = None
     name: str = "pcd"
 
 class PreprocessAgent(Agent):
@@ -61,12 +62,13 @@ class PreprocessAgent(Agent):
             pcd = self._replay_sample[f'{cam_name}_point_cloud'][0][0]
             depth = self._replay_sample[f'{cam_name}_depth'][0][:1]
             camera_matrix = self._replay_sample[f'{cam_name}_camera_intrinsics'][0]
-            pcd_from_depth = depth_to_3d(depth, camera_matrix).squeeze(0)
+            pcd_depth = depth_to_3d(depth, camera_matrix, normalize_points=False).squeeze(0)
             rgb = rearrange(rgb, 'c h w -> (h w) c')
-            pcd = rearrange(pcd_from_depth, 'c h w -> (h w) c')
+            pcd = rearrange(pcd, 'c h w -> (h w) c')
+            pcd_depth = rearrange(pcd_depth, 'c h w -> (h w) c')
             break
         sums = [
-            PointCloud(rgb=rgb, pcd=pcd, name=f"{prefix}/point_cloud"),
+            PointCloud(rgb=rgb, pcd=pcd, pcd_depth=pcd_depth, name=f"{prefix}/point_cloud"),
             ScalarSummary('%s/demo_proportion' % prefix, demo_proportion),
             HistogramSummary('%s/low_dim_state' % prefix,
                     self._replay_sample['low_dim_state']),
