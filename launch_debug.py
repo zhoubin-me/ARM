@@ -317,6 +317,7 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
         with open(os.path.join(logdir, 'action_min_max.pkl'), 'wb') as f:
             pickle.dump(action_min_max, f)
 
+    import ipdb; ipdb.set_trace()
     # env_runner = EnvRunner(
     #     train_env=env, agent=agent, train_replay_buffer=explore_replay,
     #     num_train_envs=train_envs,

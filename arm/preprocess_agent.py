@@ -1,10 +1,18 @@
-from typing import List
+from typing import List, Any
 
 import torch
 
 from yarr.agents.agent import Agent, Summary, ActResult, \
     ScalarSummary, HistogramSummary, ImageSummary
+from tensorboard.plugins.mesh import summary_v2 as mesh_summary
+from einops import rearrange
+from dataclasses import dataclass
 
+@dataclass
+class PointCloud:
+    rgb: Any = None
+    pcd: Any = None
+    name: str = "pcd"
 
 class PreprocessAgent(Agent):
 
@@ -43,7 +51,13 @@ class PreprocessAgent(Agent):
         demo_proportion = demo_f.mean()
         tile = lambda x: torch.squeeze(
             torch.cat(x.split(1, dim=1), dim=-1), dim=1)
+        rgb = self._replay_sample['front_rgb'][0][0]
+        rgb = (rgb + 1.0) / 2.0
+        pcd = self._replay_sample['front_point_cloud'][0][0]
+        rgb = rearrange(rgb, 'c h w -> (h w) c')
+        pcd = rearrange(pcd, 'c h w -> (h w) c')
         sums = [
+            PointCloud(rgb=rgb, pcd=pcd, name=f"{prefix}/point_cloud"),
             ScalarSummary('%s/demo_proportion' % prefix, demo_proportion),
             HistogramSummary('%s/low_dim_state' % prefix,
                     self._replay_sample['low_dim_state']),

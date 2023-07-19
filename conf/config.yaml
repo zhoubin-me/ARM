@@ -24,7 +24,7 @@ framework:
     tensorboard_logging: True
     csv_logging: True
     wandb_logging: True
-    project_name: "c2farm"
+    project_name: "c2fmae"
     training_iterations: 40000
     gpu: 0
     env_gpu: 0

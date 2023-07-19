@@ -263,7 +263,7 @@ class QAttentionAgent(Agent):
         return rot_and_grip_values
 
     def update(self, step: int, replay_sample: dict) -> dict:
-
+        # print("REPLAY -->", replay_sample['front_rgb'].shape, replay_sample['front_point_cloud'].shape)
         action_trans = replay_sample['trans_action_indicies'][:, -1,
                        self._layer * 3:self._layer * 3 + 3]
         action_rot_grip = replay_sample['rot_grip_action_indicies'][:, -1].long()
