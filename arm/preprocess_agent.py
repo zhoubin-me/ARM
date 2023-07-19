@@ -43,7 +43,7 @@ class PreprocessAgent(Agent):
         pcd_depth = rearrange(pcd_depth, 'b c h w -> b c (h w)')
         pcd_depth = torch.cat((pcd_depth, torch.ones(b, 1, h * w).to(depth)), dim=1)
         pcd_depth = torch.bmm(torch.inverse(camera_extr), pcd_depth)
-        pcd_depth = rearrange(pcd_depth[:, :3], 'b c (h w) -> b h w c', h=h, w=w)
+        pcd_depth = rearrange(pcd_depth[:, :3], 'b c (h w) -> b c h w', h=h, w=w)
         replay_sample[f'{came_name}_point_cloud'] = pcd_depth.unsqueeze(1).float()
 
         if 'tp1' in replay_sample:
@@ -55,7 +55,7 @@ class PreprocessAgent(Agent):
             pcd_depth_tp1 = rearrange(pcd_depth_tp1, 'b c h w -> b c (h w)')
             pcd_depth_tp1 = torch.cat((pcd_depth_tp1, torch.ones(b, 1, h * w).to(depth)), dim=1)
             pcd_depth_tp1 = torch.bmm(torch.inverse(camera_extr_tp1), pcd_depth_tp1)
-            pcd_depth_tp1 = rearrange(pcd_depth_tp1[:, :3], 'b c (h w) -> b h w c', h=h, w=w)
+            pcd_depth_tp1 = rearrange(pcd_depth_tp1[:, :3], 'b c (h w) -> b c h w', h=h, w=w)
             replay_sample[f'{came_name}_point_cloud_tp1'] = pcd_depth_tp1.unsqueeze(1).float()
             
         return replay_sample
