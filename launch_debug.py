@@ -41,6 +41,7 @@ def _create_obs_config(camera_names: List[str], camera_resolution: List[int]):
         point_cloud=True,
         mask=False,
         depth=True,
+        depth_in_meters=True,
         image_size=camera_resolution,
         render_mode=RenderMode.OPENGL)
 
@@ -320,30 +321,53 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
 
     from kornia.geometry.depth import depth_to_3d
     from einops import rearrange
+    import wandb
+    wandb.init()
     data = explore_replay.sample_transition_batch()
     pcd = data['wrist_point_cloud'][:, 0]
     depth = data['wrist_depth'][:, 0]
-    camera_intr = data['wrist_camera_intrinsics'][:, 0]
-    camera_extr = data['wrist_camera_extrinsics'][:, 0]
-    pcd_depth = depth_to_3d(torch.from_numpy(depth), torch.from_numpy(camera_intr))
-    pcd = torch.from_numpy(pcd)
+    rgb = data['wrist_rgb'][:, 0]
 
+    camera_intr = data['wrist_camera_intrinsics'][:, 0]
+    camera_intr = torch.from_numpy(camera_intr)
+
+    camera_extr = data['wrist_camera_extrinsics'][:, 0]
+    camera_extr = torch.from_numpy(camera_extr)
+
+    pcd = torch.from_numpy(pcd)
+    depth = torch.from_numpy(depth)
+
+    rgb = torch.from_numpy(rgb)
+    rgb = rearrange(rgb, 'b c h w -> b c (h w)')
+
+    pcd_depth = depth_to_3d(depth, camera_intr)
     pcd = rearrange(pcd, 'b c h w -> b c (h w)')
+    pcd_rgb = torch.cat((pcd, rgb), dim=1)
+    wandb.log({'pcd': wandb.Object3D.from_numpy(pcd_rgb.cpu().numpy()[0].transpose(1, 0))})
     pcd = torch.cat((pcd, torch.ones(64, 1, 16384)), dim=1)
 
     pcd_depth = rearrange(pcd_depth, 'b c h w -> b c (h w)')
+    pcd_depth_rgb = torch.cat((pcd_depth, rgb), dim=1)
+    wandb.log({'pcd_depth': wandb.Object3D.from_numpy(pcd_depth_rgb.cpu().numpy()[0].transpose(1, 0))})
     pcd_depth = torch.cat((pcd_depth, torch.ones(64, 1, 16384)), dim=1)
 
 
-    camera_extr = torch.from_numpy(camera_extr)
-    yy = torch.bmm(camera_extr, pcd)
-    offset = rearrange(yy[:, :3] - pcd_depth[:, :3], 'b c (h w) -> b h w c', h=128, w=128)
     
-    pcd_depth2 = torch.bmm(torch.inverse(camera_extr), pcd_depth)
-    print(pcd_depth2.shape, pcd.shape, (pcd_depth2[:, :3] - pcd[:, :3]).shape)
-    offset2 = rearrange(pcd_depth2[:, :3] - pcd[:, :3], 'b c (h w) -> b h w c', h=128, w=128)
+    # yy = torch.bmm(camera_extr, pcd)
+    # offset = rearrange(yy[:, :3] - pcd_depth[:, :3], 'b c (h w) -> b h w c', h=128, w=128)
+    
+    pcd_depth_world = torch.bmm(camera_extr, pcd_depth)
+    pcd_depth_world = torch.cat((pcd_depth_world[:, :3], rgb), dim=1)
+    # for i in range(64):
+    #     wandb.log({f'pcd_depth_world': wandb.Object3D.from_numpy(pcd_depth_world_numpy[i].transpose(1, 0))})
+    offset2 = rearrange(pcd_depth_world[:, :3] - pcd[:, :3], 'b c (h w) -> b h w c', h=128, w=128)
+
     
     import ipdb; ipdb.set_trace()
+    # print(data.keys())
+    # for k in data.keys():
+
+    #     print(k, data[k].shape)
     # env_runner = EnvRunner(
     #     train_env=env, agent=agent, train_replay_buffer=explore_replay,
     #     num_train_envs=train_envs,
