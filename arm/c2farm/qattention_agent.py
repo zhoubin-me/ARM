@@ -268,7 +268,7 @@ class QAttentionAgent(Agent):
     def _act_preprocess_inputs(self, observation):
         obs, pcds = [], []
         for n in self._camera_names:
-            if self._layer > 0 and 'wrist' not in n:
+            if False and self._layer > 0 and 'wrist' not in n:
                 pc_t = observation['%s_pixel_coord' % n]
                 rgb = self._extract_crop(pc_t, observation['%s_rgb' % n])
                 pcd = self._extract_crop(pc_t, observation['%s_point_cloud' % n])

@@ -38,11 +38,11 @@ def create_replay(batch_size: int, timesteps: int, prioritisation: bool,
         ReplayElement('rot_grip_action_indicies', (rot_and_grip_indicies_size,),
                       np.int32)
     ])
-
     for depth in range(len(voxel_sizes)):
         observation_elements.append(
             ReplayElement('attention_coordinate_layer_%d' % depth, (3,), np.float32)
         )
+        
 
     extra_replay_elements = [
         ReplayElement('demo', (), bool),
