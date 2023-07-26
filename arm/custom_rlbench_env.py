@@ -66,7 +66,9 @@ class CustomRLBenchEnv(RLBenchEnv):
                 obs.gripper_joint_positions, 0., 0.04)
 
         obs_dict = super(CustomRLBenchEnv, self).extract_obs(obs)
-
+        if 'wrist_depth' in obs_dict:
+            del obs_dict['wrist_depth']
+            
         if self._time_in_state:
             time = (1. - ((self._i if t is None else t) / float(
                 self._episode_length - 1))) * 2. - 1.
@@ -78,6 +80,7 @@ class CustomRLBenchEnv(RLBenchEnv):
         obs.joint_positions = joint_pos
 
         obs_dict['gripper_pose'] = grip_pose
+
         return obs_dict
 
     def launch(self):

@@ -4,9 +4,7 @@ import torch.nn as nn
 from arm.network_utils import Conv3DInceptionBlock, DenseBlock, SpatialSoftmax3D, \
     Conv3DInceptionBlockUpsampleBlock, Conv3DBlock
 
-
 class Qattention3DNet(nn.Module):
-
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
