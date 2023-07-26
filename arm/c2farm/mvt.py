@@ -15,7 +15,7 @@ from arm.c2farm.attn import (
     DenseBlock,
     FeedForward,
 )
-
+from arm.c2farm.renderer import BoxRenderer
 
 class MVT(nn.Module):
     def __init__(
@@ -271,6 +271,8 @@ class MVT(nn.Module):
             nn.Linear(feat_fc_dim // 2, feat_out_size),
         )
 
+        self.renderer = BoxRenderer(renderer_device, self.img_size)
+
     def get_pt_loc_on_img(self, pt, dyn_cam_info):
         """
         transform location of points in the local frame to location on the
@@ -416,79 +418,17 @@ class MVT(nn.Module):
 
         return trans
 
-    def get_wpt(self, out, dyn_cam_info, y_q=None):
+
+    def get_wpt(self, trans, dyn_cam_info, y_q=None):
         """
         Estimate the q-values given output from mvt
         :param out: output from mvt
         """
         nc = self.num_img
         h = w = self.img_size
-        bs = out["trans"].shape[0]
+        bs = trans.shape[0]
 
-        q_trans = out["trans"].view(bs, nc, h * w)
-        hm = torch.nn.functional.softmax(q_trans, 2)
-        hm = hm.view(bs, nc, h, w)
-
-        if dyn_cam_info is None:
-            dyn_cam_info_itr = (None,) * bs
-        else:
-            dyn_cam_info_itr = dyn_cam_info
-
-        pred_wpt = [
-            self.renderer.get_max_3d_frm_hm_cube(
-                hm[i : i + 1],
-                fix_cam=True,
-                dyn_cam_info=dyn_cam_info_itr[i : i + 1]
-                if not (dyn_cam_info_itr[i] is None)
-                else None,
-            )
-            for i in range(bs)
-        ]
-        pred_wpt = torch.cat(pred_wpt, 0)
-
-        assert y_q is None
-
-        return pred_wpt
-
-    def free_mem(self):
-        """
-        Could be used for freeing up the memory once a batch of testing is done
-        """
-        print("Freeing up some memory")
-        self.renderer.free_mem()
-
-        x = (
-            x.transpose(1, 2)
-            .clone()
-            .view(
-                bs * self.num_img, self.input_dim_before_seq, num_pat_img, num_pat_img
-            )
-        )
-
-        u0 = self.up0(x)
-        u0 = torch.cat([u0, d0], dim=1)
-        u = self.final(u0)
-
-        # translation decoder
-        trans = self.trans_decoder(u).view(bs, self.num_img, h, w)
-
-        hm = F.softmax(trans.detach().view(bs, self.num_img, h * w), 2).view(
-            bs * self.num_img, 1, h, w
-        )
-
-        out = {"trans": trans, "feat": feat}
-        return out
-
-    def get_wpt(self, out, dyn_cam_info, y_q=None):
-        """
-        Estimate the q-values given output from mvt
-        :param out: output from mvt
-        """
-        nc = self.num_img
-        h = w = self.img_size
-        bs = out["trans"].shape[0]
-
-        q_trans = out["trans"].view(bs, nc, h * w)
+        q_trans = trans.view(bs, nc, h * w)
         hm = torch.nn.functional.softmax(q_trans, 2)
         hm = hm.view(bs, nc, h, w)
 

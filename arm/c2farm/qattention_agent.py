@@ -112,6 +112,8 @@ class QFunction(nn.Module):
         voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
 
         q_trans, rot_and_grip_q = self._qnet(voxel_grid, proprio, latent)
+
+        print(q_trans.shape, rot_and_grip_q.shape, voxel_grid.shape)
         return q_trans, rot_and_grip_q, voxel_grid
 
     def latents(self):
