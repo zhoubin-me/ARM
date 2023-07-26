@@ -94,6 +94,9 @@ class QFunction(nn.Module):
         imgs = [xx[0].unsqueeze(1) for xx in x]
         imgs = torch.cat(imgs, dim=1)
         img_feat = self._mvt(imgs)
+        qvals = self._mvt.get_wpt(img_feat, None)
+        print(qvals.shape)
+
         flat_imag_features = rearrange(img_feat, 'b n h w -> b (h w) n')
         pcd_flat = rearrange(pcd[-1], 'b n h w -> b (h w) n')
         
@@ -113,7 +116,9 @@ class QFunction(nn.Module):
 
         q_trans, rot_and_grip_q = self._qnet(voxel_grid, proprio, latent)
 
-        print(q_trans.shape, rot_and_grip_q.shape, voxel_grid.shape)
+        if rot_and_grip_q is not None:
+            print(rot_and_grip_q.shape)
+        print(q_trans.shape, voxel_grid.shape)
         return q_trans, rot_and_grip_q, voxel_grid
 
     def latents(self):

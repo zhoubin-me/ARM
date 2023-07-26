@@ -271,7 +271,7 @@ class MVT(nn.Module):
             nn.Linear(feat_fc_dim // 2, feat_out_size),
         )
 
-        self.renderer = BoxRenderer(renderer_device, self.img_size)
+        self.renderer = BoxRenderer(renderer_device, (self.img_size, self.img_size),num_cams=3)
 
     def get_pt_loc_on_img(self, pt, dyn_cam_info):
         """

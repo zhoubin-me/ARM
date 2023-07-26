@@ -157,6 +157,7 @@ class BoxRenderer:
         points_per_pixel=5,
         compositor="norm",
         with_depth=False,
+        num_cams=3,
     ):
         """Rendering images form point clouds
 
@@ -172,6 +173,7 @@ class BoxRenderer:
         self.points_per_pixel = points_per_pixel
         self.compositor = compositor
         self.with_depth = with_depth
+        self.num_fix_cam = num_cams
 
         self.init()
 
