@@ -209,7 +209,7 @@ def create_agent(cfg: DictConfig, env, depth_0bounds=None, cam_resolution=None):
     for depth, vox_size in enumerate(cfg.method.voxel_sizes):
         last = depth == len(cfg.method.voxel_sizes) - 1
         unet3d = Qattention3DNet(
-            in_channels=VOXEL_FEATS + 3 + 1 + 3,
+            in_channels=VOXEL_FEATS + 3 + 1 + 3 + 3,
             out_channels=1,
             voxel_size=vox_size,
             out_dense=((num_rotation_classes * 3) + 2) if last else 0,
@@ -236,7 +236,7 @@ def create_agent(cfg: DictConfig, env, depth_0bounds=None, cam_resolution=None):
             include_low_dim_state=True,
             image_resolution=cam_resolution,
             batch_size=cfg.replay.batch_size,
-            voxel_feature_size=3,
+            voxel_feature_size=3+3,
             exploration_strategy=cfg.method.exploration_strategy,
             lambda_weight_l2=cfg.method.lambda_weight_l2,
             num_rotation_classes=num_rotation_classes,

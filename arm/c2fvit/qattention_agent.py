@@ -1,7 +1,7 @@
 import copy
 import logging
 import os
-from typing import List
+from typing import List, Any
 
 import numpy as np
 import torch
@@ -15,6 +15,7 @@ from arm import utils
 from arm.utils import visualise_voxel, stack_on_channel
 from arm.c2fvit.voxel_grid import VoxelGrid
 from timm.models import VisionTransformer
+from einops import rearrange
 
 NAME = 'QAttentionAgent'
 REPLAY_BETA = 1.0
@@ -27,19 +28,22 @@ class QFunction(nn.Module):
                  voxel_grid: VoxelGrid,
                  bounds_offset: float,
                  rotation_resolution: float,
-                 device):
+                 device: Any,
+                 img_size: int):
         super(QFunction, self).__init__()
         self._rotation_resolution = rotation_resolution
         self._voxel_grid = voxel_grid
+        self._img_size = img_size
         self._bounds_offset = bounds_offset
         self._qnet = copy.deepcopy(unet_3d)
         self._qnet._dev = device
         self._qnet.build()
-
+        
+        vit_args = dict(img_size=img_size, patch_size=16, embed_dim=192, depth=12, num_heads=3)
         self._vit = VisionTransformer(
-            img_size=128,
-            patch_size=16,
+            **vit_args
         )
+        self._vit_decoder = nn.ConvTranspose2d(192, 3, 16, 16)
 
     def _argmax_3d(self, tensor_orig):
         b, c, d, h, w = tensor_orig.shape  # c will be one
@@ -62,6 +66,13 @@ class QFunction(nn.Module):
                  q_rot_grip[:, -2:].argmax(-1, keepdim=True)], -1)
         return coords, rot_and_grip_indicies
 
+    def forward_vit(self, x):
+        x = self._vit.forward_features(x)[:, 1:]
+        num_patches = self._img_size // 16
+        x = rearrange(x, 'b (h w) d -> b d h w', h=num_patches, w=num_patches)
+        x = self._vit_decoder(x)
+        return x
+
     def forward(self, x, proprio, pcd,
                 bounds=None, latent=None):
         # x will be list of list (list of [rgb, pcd])
@@ -70,6 +81,10 @@ class QFunction(nn.Module):
             [p.permute(0, 2, 3, 1).reshape(b, -1, 3) for p in pcd], 1)
 
         image_features = [xx[0] for xx in x]
+        image_features_vit = [self.forward_vit(xx[0]) for xx in x]
+        image_features = [torch.cat((x, y), dim=1) 
+                          for x, y in zip(image_features, image_features_vit)]
+
         feat_size = image_features[0].shape[1]
         flat_imag_features = torch.cat(
             [p.permute(0, 2, 3, 1).reshape(b, -1, feat_size) for p in
@@ -138,7 +153,6 @@ class QAttentionAgent(Agent):
 
         self._num_rotation_classes = num_rotation_classes
         self._rotation_resolution = rotation_resolution
-
         self._name = NAME + '_layer' + str(self._layer)
 
     def build(self, training: bool, device: torch.device = None):
@@ -154,16 +168,18 @@ class QAttentionAgent(Agent):
             max_num_coords=np.prod(self._image_resolution) * self._num_cameras,
         )
         self._vox_grid = vox_grid
+        img_size = self._image_resolution[0] if self._layer == 0 else self._image_crop_size
 
         self._q = QFunction(self._unet3d, vox_grid, self._bounds_offset,
                             self._rotation_resolution,
-                            device).to(device).train(training)
+                            device, img_size).to(device).train(training)
         self._q_target = None
         if training:
             self._q_target = QFunction(self._unet3d, vox_grid,
                                        self._bounds_offset,
                                        self._rotation_resolution,
-                                       device).to(
+                                       device,
+                                       img_size).to(
                 device).train(False)
             for param in self._q_target.parameters():
                 param.requires_grad = False
@@ -457,14 +473,14 @@ class QAttentionAgent(Agent):
             summaries.extend([
                 ImageSummary('%s/crops/%s' % (self._name, name), crops)])
 
-        for tag, param in self._q.named_parameters():
-            assert not torch.isnan(param.grad.abs() <= 1.0).all()
-            summaries.append(
-                HistogramSummary('%s/gradient/%s' % (self._name, tag),
-                                 param.grad))
-            summaries.append(
-                HistogramSummary('%s/weight/%s' % (self._name, tag),
-                                 param.data))
+        # for tag, param in self._q.named_parameters():
+        #     assert not torch.isnan(param.grad.abs() <= 1.0).all()
+        #     summaries.append(
+        #         HistogramSummary('%s/gradient/%s' % (self._name, tag),
+        #                          param.grad))
+        #     summaries.append(
+        #         HistogramSummary('%s/weight/%s' % (self._name, tag),
+        #                          param.data))
 
         for name, t in self._q.latents().items():
             summaries.append(
