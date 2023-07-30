@@ -175,7 +175,7 @@ class QAttentionAgent(Agent):
             self._act_qvalues = torch.min(q, q2)[:1]
             self._rgb_observation = observation['front_rgb'][0, -1]
             return ActResult(
-                coords[0],
+                coords[0].cpu().numpy(),
                 observation_elements={
                     '%s_pixel_coord' % self._camera_name: coords[0].cpu().numpy(),
                 },
