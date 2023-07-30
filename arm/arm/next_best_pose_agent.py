@@ -440,7 +440,7 @@ class NextBestPoseAgent(Agent):
 
         summaries += self._qattention_agent.update_summaries()
         for summary in summaries:
-            if 'cuda' in str(summary.value.device):
+            if isinstance(summary.value, torch.Tensor) and 'cuda' in str(summary.value.device):
                 summary.value = summary.value.cpu()
         return summaries
 
@@ -453,7 +453,7 @@ class NextBestPoseAgent(Agent):
         ]
         summaries += self._qattention_agent.act_summaries()
         for summary in summaries:
-            if 'cuda' in str(summary.value.device):
+            if isinstance(summary.value, torch.Tensor) and 'cuda' in str(summary.value.device):
                 summary.value = summary.value.cpu()
         return summaries
 
