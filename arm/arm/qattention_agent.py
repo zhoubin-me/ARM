@@ -177,7 +177,7 @@ class QAttentionAgent(Agent):
             return ActResult(
                 coords[0],
                 observation_elements={
-                    '%s_pixel_coord' % self._camera_name: coords[0],
+                    '%s_pixel_coord' % self._camera_name: coords[0].cpu().numpy(),
                 },
                 info={'q_values': self._act_qvalues}
             )
