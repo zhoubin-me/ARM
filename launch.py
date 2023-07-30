@@ -25,7 +25,7 @@ from yarr.runners.env_runner import EnvRunner
 from yarr.runners.pytorch_train_runner import PyTorchTrainRunner
 from yarr.utils.stat_accumulator import SimpleAccumulator
 
-from arm import arm, c2farm, lpr, qte
+from arm import arm, c2farm, lpr, qte, arm_mae
 from arm.baselines import bc, td3, dac, sac
 from arm.custom_rlbench_env import CustomRLBenchEnv
 from pyrep.const import RenderMode
@@ -164,6 +164,41 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
                                                              axis=0)
         action_min_max = _modify_action_min_max(action_min_max)
         agent = arm.launch_utils.create_agent(
+            cams[0], cfg.method.activation, cfg.method.q_conf,
+            action_min_max, cfg.method.alpha, cfg.method.alpha_lr,
+            cfg.method.alpha_auto_tune,
+            cfg.method.next_best_pose_critic_lr,
+            cfg.method.next_best_pose_actor_lr,
+            cfg.method.next_best_pose_critic_weight_decay,
+            cfg.method.next_best_pose_actor_weight_decay,
+            cfg.method.crop_shape,
+            cfg.method.next_best_pose_tau,
+            cfg.method.next_best_pose_critic_grad_clip,
+            cfg.method.next_best_pose_actor_grad_clip,
+            cfg.method.qattention_tau,
+            cfg.method.qattention_lr,
+            cfg.method.qattention_weight_decay,
+            cfg.method.qattention_lambda_qreg,
+            env.low_dim_state_len,
+            cfg.method.qattention_grad_clip)
+
+    elif cfg.method.name == 'ARMMAE':
+        if len(cams) > 1 or 'front' not in cams:
+            raise ValueError('ARM expects only front camera.')
+        explore_replay = arm_mae.launch_utils.create_replay(
+            cfg.replay.batch_size, cfg.replay.timesteps,
+            cfg.replay.prioritisation,
+            replay_path if cfg.replay.use_disk else None, cams, env)
+        replays = [explore_replay]
+        all_actions = arm_mae.launch_utils.fill_replay(
+            explore_replay, cfg.rlbench.task, env, cfg.rlbench.demos,
+            cfg.method.demo_augmentation, cfg.method.demo_augmentation_every_n,
+            cams)
+
+        action_min_max = np.min(all_actions, axis=0), np.max(all_actions,
+                                                             axis=0)
+        action_min_max = _modify_action_min_max(action_min_max)
+        agent = arm_mae.launch_utils.create_agent(
             cams[0], cfg.method.activation, cfg.method.q_conf,
             action_min_max, cfg.method.alpha, cfg.method.alpha_lr,
             cfg.method.alpha_auto_tune,
