@@ -22,15 +22,17 @@ framework:
     replay_ratio: 128
     transitions_before_train: 200
     tensorboard_logging: True
+    wandb_logging: True
     csv_logging: True
+    project_name: 'MAE4ARM'
     training_iterations: 40000
     gpu: 0
     env_gpu: 0
-    logdir: '/tmp/arm_test/'
+    logdir: './arm-test/'
     seeds: 1
 
 defaults:
-    - method: C2FARM
+    - method: ARM
 
 hydra:
     run:
