@@ -319,7 +319,7 @@ def run_seed(cfg: DictConfig, env, cams, train_device, env_device, seed) -> None
         replay_ratio=replay_ratio,
         transitions_before_train=cfg.framework.transitions_before_train,
         tensorboard_logging=cfg.framework.tensorboard_logging,
-        wandb_cfg=cfg.framework.wandb_logging,
+        wandb_logging=cfg.framework.wandb_logging,
         wandb_cfg=dict(cfg),
         project_name=cfg.framework.project_name,
         csv_logging=cfg.framework.csv_logging)
