@@ -1,6 +1,6 @@
 # @package _group_
 
-name: 'ARM'
+name: 'ARMMAE'
 activation: lrelu
 q_conf: True
 alpha: 0.05

@@ -26,10 +26,12 @@ class QFunction(nn.Module):
                  voxel_grid: VoxelGrid,
                  bounds_offset: float,
                  rotation_resolution: float,
+                 q_voxel_grid: VoxelGrid,
                  device):
         super(QFunction, self).__init__()
         self._rotation_resolution = rotation_resolution
         self._voxel_grid = voxel_grid
+        self._q_voxel_grid = q_voxel_grid
         self._bounds_offset = bounds_offset
         self._qnet = copy.deepcopy(unet_3d)
         self._qnet._dev = device
@@ -55,6 +57,10 @@ class QFunction(nn.Module):
                  q_rot[:, 2:3].argmax(-1),
                  q_rot_grip[:, -2:].argmax(-1, keepdim=True)], -1)
         return coords, rot_and_grip_indicies
+    
+    def forward_mae(self, x):
+        loss, pred, _ = self._qnet.forward(x)
+        return loss, pred
 
     def forward(self, x, proprio, pcd,
                 bounds=None, latent=None):
@@ -69,17 +75,16 @@ class QFunction(nn.Module):
             [p.permute(0, 2, 3, 1).reshape(b, -1, feat_size) for p in
              image_features], 1)
 
-        voxel_grid = self._voxel_grid.coords_to_bounding_voxel_grid(
+        voxel_grid = self.q_voxel_grid.coords_to_bounding_voxel_grid(
             pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
-
+        
         # Swap to channels fist
         voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
-
-        q_trans, rot_and_grip_q = self._qnet(voxel_grid, proprio, latent)
+        q_trans, rot_and_grip_q = self._qnet.forwar_encoder(voxel_grid)
         return q_trans, rot_and_grip_q, voxel_grid
 
     def latents(self):
-        return self._qnet.latent_dict
+        return {}
 
 
 class QAttentionAgent(Agent):
@@ -141,16 +146,25 @@ class QAttentionAgent(Agent):
 
         vox_grid = VoxelGrid(
             coord_bounds=self._coordinate_bounds,
+            voxel_size=self._voxel_size // 8,
+            device=device,
+            batch_size=self._batch_size if training else 1,
+            feature_size=self._voxel_feature_size,
+            max_num_coords=np.prod(self._image_resolution) * self._num_cameras,
+        )
+
+        q_vox_grid = VoxelGrid(
+            coord_bounds=self._coordinate_bounds,
             voxel_size=self._voxel_size,
             device=device,
             batch_size=self._batch_size if training else 1,
             feature_size=self._voxel_feature_size,
             max_num_coords=np.prod(self._image_resolution) * self._num_cameras,
         )
-        self._vox_grid = vox_grid
 
+        self._vox_grid = vox_grid
         self._q = QFunction(self._unet3d, vox_grid, self._bounds_offset,
-                            self._rotation_resolution,
+                            self._rotation_resolution, q_vox_grid,
                             device).to(device).train(training)
         self._q_target = None
         if training:
