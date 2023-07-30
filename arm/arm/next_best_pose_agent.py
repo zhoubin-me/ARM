@@ -408,7 +408,7 @@ class NextBestPoseAgent(Agent):
             robot_state = stack_on_channel(observation['low_dim_state'][:, -1:])
             obs_feats = self._q.shared(observations)
             mu, pi, _, _ = self._actor(obs_feats, robot_state)
-            act_res.action = (mu if deterministic else pi)[0]
+            act_res.action = (mu if deterministic else pi)[0].cpu().numpy()
             act_res.info.update({
                 'rgb_crop': observations[0]
             })
