@@ -438,8 +438,11 @@ class NextBestPoseAgent(Agent):
             summaries.append(
                 HistogramSummary('%s/weight/%s' % (NAME, tag), param.data))
 
-        pixel_summaries = self._qattention_agent.update_summaries()
-        return pixel_summaries + summaries
+        summaries += self._qattention_agent.update_summaries()
+        for summary in summaries:
+            if 'cuda' in str(summary.value.device):
+                summary.value = summary.value.cpu()
+        return summaries
 
     def act_summaries(self) -> List[Summary]:
         summaries = [
@@ -448,7 +451,11 @@ class NextBestPoseAgent(Agent):
             ImageSummary('%s/crops/act/point_cloud' % NAME,
                          self._act_crop_summaries[1]),
         ]
-        return summaries + self._qattention_agent.act_summaries()
+        summaries += self._qattention_agent.act_summaries()
+        for summary in summaries:
+            if 'cuda' in str(summary.value.device):
+                summary.value = summary.value.cpu()
+        return summaries
 
     def load_weights(self, savedir: str):
         self._qattention_agent.load_weights(savedir)
