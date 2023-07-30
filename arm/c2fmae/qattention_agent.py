@@ -56,6 +56,7 @@ class QFunction(nn.Module):
                  q_rot[:, 1:2].argmax(-1),
                  q_rot[:, 2:3].argmax(-1),
                  q_rot_grip[:, -2:].argmax(-1, keepdim=True)], -1)
+        
         return coords, rot_and_grip_indicies
     
     def forward_mae(self, x):
@@ -75,12 +76,14 @@ class QFunction(nn.Module):
             [p.permute(0, 2, 3, 1).reshape(b, -1, feat_size) for p in
              image_features], 1)
 
-        voxel_grid = self.q_voxel_grid.coords_to_bounding_voxel_grid(
+        voxel_grid = self._q_voxel_grid.coords_to_bounding_voxel_grid(
             pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
         
         # Swap to channels fist
         voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
-        q_trans, rot_and_grip_q = self._qnet.forwar_encoder(voxel_grid)
+        q_trans, rot_and_grip_q = self._qnet.forward_encoder(voxel_grid)
+        q_trans = q_trans.unsqueeze(1)
+        rot_and_grip_q = rot_and_grip_q.squeeze(1) if rot_and_grip_q is not None else None
         return q_trans, rot_and_grip_q, voxel_grid
 
     def latents(self):
@@ -171,6 +174,7 @@ class QAttentionAgent(Agent):
             self._q_target = QFunction(self._unet3d, vox_grid,
                                        self._bounds_offset,
                                        self._rotation_resolution,
+                                       q_vox_grid,
                                        device).to(
                 device).train(False)
             for param in self._q_target.parameters():
@@ -277,7 +281,6 @@ class QAttentionAgent(Agent):
         return rot_and_grip_values
 
     def update(self, step: int, replay_sample: dict) -> dict:
-
         action_trans = replay_sample['trans_action_indicies'][:, -1,
                        self._layer * 3:self._layer * 3 + 3]
         action_rot_grip = replay_sample['rot_grip_action_indicies'][:, -1].long()
@@ -393,7 +396,7 @@ class QAttentionAgent(Agent):
             cp = observation['attention_coordinate']
             bounds = torch.cat(
                 [cp - self._bounds_offset, cp + self._bounds_offset], dim=1)
-        res = (bounds[:, 3:] - bounds[:, :3]) / self._voxel_size
+        res = (bounds[:, 3:] - bounds[:, :3]) / (self._voxel_size // 8)
 
         max_rot_index = int(360 // self._rotation_resolution)
         proprio = None
@@ -465,14 +468,14 @@ class QAttentionAgent(Agent):
             summaries.extend([
                 ImageSummary('%s/crops/%s' % (self._name, name), crops)])
 
-        for tag, param in self._q.named_parameters():
-            assert not torch.isnan(param.grad.abs() <= 1.0).all()
-            summaries.append(
-                HistogramSummary('%s/gradient/%s' % (self._name, tag),
-                                 param.grad))
-            summaries.append(
-                HistogramSummary('%s/weight/%s' % (self._name, tag),
-                                 param.data))
+        # for tag, param in self._q.named_parameters():
+        #     assert not torch.isnan(param.grad.abs() <= 1.0).all()
+        #     summaries.append(
+        #         HistogramSummary('%s/gradient/%s' % (self._name, tag),
+        #                          param.grad))
+        #     summaries.append(
+        #         HistogramSummary('%s/weight/%s' % (self._name, tag),
+        #                          param.data))
 
         for name, t in self._q.latents().items():
             summaries.append(
@@ -481,12 +484,13 @@ class QAttentionAgent(Agent):
         return summaries
 
     def act_summaries(self) -> List[Summary]:
-        return [
-            ImageSummary('%s/act_Qattention' % self._name,
-                         transforms.ToTensor()(visualise_voxel(
-                             self._act_voxel_grid.cpu().numpy(),
-                             self._act_qvalues.cpu().numpy(),
-                             self._act_max_coordinate.cpu().numpy())))]
+        return []
+        # return [
+        #     ImageSummary('%s/act_Qattention' % self._name,
+        #                  transforms.ToTensor()(visualise_voxel(
+        #                      self._act_voxel_grid.cpu().numpy(),
+        #                      self._act_qvalues.cpu().numpy(),
+        #                      self._act_max_coordinate.cpu().numpy())))]
 
     def load_weights(self, savedir: str):
         self._q.load_state_dict(

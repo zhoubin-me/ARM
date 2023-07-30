@@ -38,7 +38,7 @@ class Qattention3DNet(nn.Module):
         if self._build_calls != 1:
             raise RuntimeError('Build needs to be called once.')
         self.mae = MaskedAutoencoderViT(
-            img_size=self._voxel_size[0],
+            img_size=self._voxel_size,
             in_chans=self._in_channels,
             patch_size=8, 
             embed_dim=128, 
@@ -53,18 +53,19 @@ class Qattention3DNet(nn.Module):
         self.trans_final = nn.Sequential(
             nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(128, 64),
             nn.ReLU(),
             nn.Linear(64, self._out_channels)
         )
 
-        self.rot_grip_final = nn.Sequential(
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(64, self._out_dense)
-        )
+        if self._out_dense > 0:
+            self.rot_grip_final = nn.Sequential(
+                nn.Linear(128, 128),
+                nn.ReLU(),
+                nn.Linear(128, 64),
+                nn.ReLU(),
+                nn.Linear(64, self._out_dense)
+            )
         
     
     def forward(self, x):
@@ -73,8 +74,8 @@ class Qattention3DNet(nn.Module):
     def forward_encoder(self, x):
         x, _, _ = self.mae.forward_encoder(x, 0.0)
         trans = x[:, 1:]
-        rot = x[:, 0]
+        rot = x[:, :1]
         trans = self.trans_final(trans)
-        rot = self.rot_grip_final(rot)
-        trans = rearrange(trans, 'b l d -> b p1 p2 p3', p1=8, p2=8, p3=8)
+        rot = self.rot_grip_final(rot) if self._out_dense > 0 else None
+        trans = rearrange(trans, 'b (p1 p2 p3) 1 -> b p1 p2 p3', p1=8, p2=8, p3=8)
         return trans, rot

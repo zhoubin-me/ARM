@@ -172,6 +172,7 @@ def fill_replay(replay: ReplayBuffer,
                 crop_augmentation: bool):
 
     logging.info('Filling replay with demos...')
+    voxel_sizes = [x // 8 for x in voxel_sizes]
     for d_idx in range(num_demos):
         demo = env.env.get_demos(
             task, 1, variation_number=0, random_selection=False,
