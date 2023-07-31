@@ -26,12 +26,10 @@ class QFunction(nn.Module):
                  voxel_grid: VoxelGrid,
                  bounds_offset: float,
                  rotation_resolution: float,
-                 q_voxel_grid: VoxelGrid,
                  device):
         super(QFunction, self).__init__()
         self._rotation_resolution = rotation_resolution
         self._voxel_grid = voxel_grid
-        self._q_voxel_grid = q_voxel_grid
         self._bounds_offset = bounds_offset
         self._qnet = copy.deepcopy(unet_3d)
         self._qnet._dev = device
@@ -76,7 +74,7 @@ class QFunction(nn.Module):
             [p.permute(0, 2, 3, 1).reshape(b, -1, feat_size) for p in
              image_features], 1)
 
-        voxel_grid = self._q_voxel_grid.coords_to_bounding_voxel_grid(
+        voxel_grid = self._voxel_grid.coords_to_bounding_voxel_grid(
             pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
         
         # Swap to channels fist
@@ -149,7 +147,7 @@ class QAttentionAgent(Agent):
 
         vox_grid = VoxelGrid(
             coord_bounds=self._coordinate_bounds,
-            voxel_size=self._voxel_size // 8,
+            voxel_size=self._voxel_size,
             device=device,
             batch_size=self._batch_size if training else 1,
             feature_size=self._voxel_feature_size,
@@ -158,7 +156,7 @@ class QAttentionAgent(Agent):
 
         q_vox_grid = VoxelGrid(
             coord_bounds=self._coordinate_bounds,
-            voxel_size=self._voxel_size,
+            voxel_size=self._voxel_size * 8,
             device=device,
             batch_size=self._batch_size if training else 1,
             feature_size=self._voxel_feature_size,
@@ -166,15 +164,14 @@ class QAttentionAgent(Agent):
         )
 
         self._vox_grid = vox_grid
-        self._q = QFunction(self._unet3d, vox_grid, self._bounds_offset,
-                            self._rotation_resolution, q_vox_grid,
+        self._q = QFunction(self._unet3d, q_vox_grid, self._bounds_offset,
+                            self._rotation_resolution,
                             device).to(device).train(training)
         self._q_target = None
         if training:
-            self._q_target = QFunction(self._unet3d, vox_grid,
+            self._q_target = QFunction(self._unet3d, q_vox_grid,
                                        self._bounds_offset,
                                        self._rotation_resolution,
-                                       q_vox_grid,
                                        device).to(
                 device).train(False)
             for param in self._q_target.parameters():
@@ -396,7 +393,7 @@ class QAttentionAgent(Agent):
             cp = observation['attention_coordinate']
             bounds = torch.cat(
                 [cp - self._bounds_offset, cp + self._bounds_offset], dim=1)
-        res = (bounds[:, 3:] - bounds[:, :3]) / (self._voxel_size // 8)
+        res = (bounds[:, 3:] - bounds[:, :3]) / self._voxel_size
 
         max_rot_index = int(360 // self._rotation_resolution)
         proprio = None

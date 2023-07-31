@@ -8,7 +8,6 @@ from arm.c2fmae.mae import MaskedAutoencoderViT
 from einops import rearrange
 
 class Qattention3DNet(nn.Module):
-
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
@@ -38,9 +37,9 @@ class Qattention3DNet(nn.Module):
         if self._build_calls != 1:
             raise RuntimeError('Build needs to be called once.')
         self.mae = MaskedAutoencoderViT(
-            img_size=self._voxel_size,
+            img_size=128,
             in_chans=self._in_channels,
-            patch_size=8, 
+            patch_size=8,
             embed_dim=128, 
             depth=4,
             num_heads=4,
@@ -77,5 +76,6 @@ class Qattention3DNet(nn.Module):
         rot = x[:, :1]
         trans = self.trans_final(trans)
         rot = self.rot_grip_final(rot) if self._out_dense > 0 else None
-        trans = rearrange(trans, 'b (p1 p2 p3) 1 -> b p1 p2 p3', p1=8, p2=8, p3=8)
+        p = self._voxel_size
+        trans = rearrange(trans, 'b (p1 p2 p3) 1 -> b p1 p2 p3', p1=p, p2=p, p3=p)
         return trans, rot
