@@ -57,9 +57,24 @@ class QFunction(nn.Module):
         
         return coords, rot_and_grip_indicies
     
-    def forward_mae(self, x):
-        loss, pred, _ = self._qnet.forward(x)
-        return loss, pred
+    def forward_mae(self, x, proprio, pcd, bounds):
+        # x will be list of list (list of [rgb, pcd])
+        b = x[0][0].shape[0]
+        pcd_flat = torch.cat(
+            [p.permute(0, 2, 3, 1).reshape(b, -1, 3) for p in pcd], 1)
+
+        image_features = [xx[0] for xx in x]
+        feat_size = image_features[0].shape[1]
+        flat_imag_features = torch.cat(
+            [p.permute(0, 2, 3, 1).reshape(b, -1, feat_size) for p in
+             image_features], 1)
+
+        voxel_grid = self._voxel_grid.coords_to_bounding_voxel_grid(
+            pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
+        
+        voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
+        loss, _, _ = self._qnet.forward(voxel_grid, proprio)
+        return loss
 
     def forward(self, x, proprio, pcd,
                 bounds=None, latent=None):
@@ -79,7 +94,7 @@ class QFunction(nn.Module):
         
         # Swap to channels fist
         voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
-        q_trans, rot_and_grip_q = self._qnet.forward_encoder(voxel_grid)
+        q_trans, rot_and_grip_q = self._qnet.forward_encoder(voxel_grid, proprio)
         q_trans = q_trans.unsqueeze(1)
         rot_and_grip_q = rot_and_grip_q.squeeze(1) if rot_and_grip_q is not None else None
         return q_trans, rot_and_grip_q, voxel_grid
@@ -306,6 +321,8 @@ class QAttentionAgent(Agent):
 
         obs, obs_tp1, pcd, pcd_tp1 = self._preprocess_inputs(replay_sample)
 
+        recons_loss = self._q.forward_mae(obs, proprio, pcd, bounds)
+
         q, q_rot_grip, voxel_grid = self._q(
             obs, proprio, pcd, bounds,
             replay_sample.get('prev_layer_voxel_grid', None))
@@ -342,7 +359,7 @@ class QAttentionAgent(Agent):
 
         loss_weights = utils.loss_weights(replay_sample, REPLAY_BETA)
         combined_delta = q_delta.mean(1)
-        total_loss = ((combined_delta + qreg_loss) * loss_weights).mean()
+        total_loss = ((combined_delta + qreg_loss) * loss_weights).mean() + recons_loss
 
         self._optimizer.zero_grad()
         total_loss.backward()
@@ -354,7 +371,8 @@ class QAttentionAgent(Agent):
             'q/mean_qattention': q.mean(),
             'q/max_qattention': chosen_trans_q1.max(1)[0].mean(),
             'losses/total_loss': total_loss,
-            'losses/qreg': qreg_loss.mean()
+            'losses/qreg': qreg_loss.mean(),
+            'losses/recons_loss': recons_loss,
         }
         if with_rot_and_grip:
             self._summaries.update({

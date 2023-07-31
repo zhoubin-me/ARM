@@ -57,6 +57,8 @@ class Qattention3DNet(nn.Module):
             nn.Linear(64, self._out_channels)
         )
 
+        self.proprio_emb = nn.Linear(self._low_dim_size, 128)
+
         if self._out_dense > 0:
             self.rot_grip_final = nn.Sequential(
                 nn.Linear(128, 128),
@@ -67,12 +69,14 @@ class Qattention3DNet(nn.Module):
             )
         
     
-    def forward(self, x):
-        return self.mae.forward(x)
+    def forward(self, x, proprio):
+        proprio = self.proprio_emb(proprio).unsqueeze(1)
+        return self.mae.forward(x, proprio)
     
-    def forward_encoder(self, x):
-        x, _, _ = self.mae.forward_encoder(x, 0.0)
-        trans = x[:, 1:]
+    def forward_encoder(self, x, proprio):
+        proprio = self.proprio_emb(proprio).unsqueeze(1)
+        x, _, _ = self.mae.forward_encoder(x, proprio, 0.0)
+        trans = x[:, 2:]
         rot = x[:, :1]
         trans = self.trans_final(trans)
         rot = self.rot_grip_final(rot) if self._out_dense > 0 else None
