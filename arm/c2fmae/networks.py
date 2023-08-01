@@ -6,6 +6,8 @@ from functools import partial
 
 from arm.c2fmae.mae import MaskedAutoencoderViT
 from einops import rearrange
+from arm.network_utils import DenseBlock, Conv3DBlock, Conv3DInceptionBlock 
+
 
 class Qattention3DNet(nn.Module):
     def __init__(self,
@@ -50,26 +52,44 @@ class Qattention3DNet(nn.Module):
             decoder_num_heads=8,
             mlp_ratio=4,
             norm_layer=partial(nn.LayerNorm, eps=1e-6))
-
-        self.trans_final = nn.Sequential(
-            nn.Linear(emb_dim, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, self._out_channels)
-        )
-
+        
         self.proprio_emb = nn.Linear(self._low_dim_size, emb_dim)
 
-        if self._out_dense > 0:
-            self.rot_grip_final = nn.Sequential(
-                nn.Linear(emb_dim, 128),
-                nn.ReLU(),
-                nn.Linear(128, 128),
-                nn.ReLU(),
-                nn.Linear(128, self._out_dense)
-            )
+        self.inp_proc = Conv3DBlock(10, emb_dim // 2, 1, 1)
+        self.trans_proc = Conv3DBlock(emb_dim, emb_dim // 2, 1, 1)
 
+        self.post_proc = nn.Sequential(
+            Conv3DInceptionBlock(
+                emb_dim,
+                emb_dim,
+                activation="lrelu",
+                residual=True,
+            ),
+            Conv3DBlock(
+                emb_dim * 2,
+                emb_dim,
+                1,
+                1,
+            ),
+            Conv3DInceptionBlock(
+                emb_dim,
+                emb_dim,
+                activation="lrelu",
+                residual=True,
+            ),
+            Conv3DBlock(
+                emb_dim * 2,
+                1,
+                padding=1,
+            ),
+        )
+
+        if self._out_dense > 0:
+            self.rot_grip_proc = nn.Sequential(
+            DenseBlock(emb_dim, 128, activation='lrelu'),
+            DenseBlock(128, 128, activation='lrelu'),
+            DenseBlock(128, self._out_dense, activation=None)
+        )
 
     def forward(self, x, proprio):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
@@ -77,11 +97,23 @@ class Qattention3DNet(nn.Module):
 
     def forward_encoder(self, x, proprio):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
-        x, _, _ = self.mae.forward_encoder(x, proprio, 0.0)
-        trans = x[:, 2:]
-        rot = x[:, :1]
-        trans = self.trans_final(trans)
-        rot = self.rot_grip_final(rot) if self._out_dense > 0 else None
+        y, _, _ = self.mae.forward_encoder(x, proprio, 0.0)
+        rot_grip = y[:, :1]
+        rot = self.rot_grip_proc(rot_grip) if self._out_dense > 0 else None
+
         p = self._voxel_size
-        trans = rearrange(trans, 'b (p1 p2 p3) 1 -> b p1 p2 p3', p1=p, p2=p, p3=p)
+        trans = y[:, 2:]
+        trans = rearrange(
+            trans, 
+            'b (p1 p2 p3) c -> b c p1 p2 p3', 
+            p1=self._voxel_size, 
+            p2=self._voxel_size, 
+            p3=self._voxel_size)
+        
+        trans_ = self.trans_proc(trans)
+        x_ = self.inp_proc(x)
+        trans = torch.cat([trans_, x_], dim=1)
+        trans = self.post_proc(trans)
         return trans, rot
+
+
