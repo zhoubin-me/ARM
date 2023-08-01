@@ -36,36 +36,38 @@ class Qattention3DNet(nn.Module):
         self._build_calls += 1
         if self._build_calls != 1:
             raise RuntimeError('Build needs to be called once.')
+        
+        emb_dim = 256
         self.mae = MaskedAutoencoderViT(
             img_size=64,
             in_chans=self._in_channels,
             patch_size=8,
-            embed_dim=128,
-            depth=4,
-            num_heads=4,
-            decoder_embed_dim=256,
+            embed_dim=emb_dim,
+            depth=8,
+            num_heads=8,
+            decoder_embed_dim=emb_dim,
             decoder_depth=4,
             decoder_num_heads=8,
             mlp_ratio=4,
             norm_layer=partial(nn.LayerNorm, eps=1e-6))
 
         self.trans_final = nn.Sequential(
+            nn.Linear(emb_dim, 128),
+            nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, self._out_channels)
+            nn.Linear(128, self._out_channels)
         )
 
-        self.proprio_emb = nn.Linear(self._low_dim_size, 128)
+        self.proprio_emb = nn.Linear(self._low_dim_size, emb_dim)
 
         if self._out_dense > 0:
             self.rot_grip_final = nn.Sequential(
+                nn.Linear(emb_dim, 128),
+                nn.ReLU(),
                 nn.Linear(128, 128),
                 nn.ReLU(),
-                nn.Linear(128, 64),
-                nn.ReLU(),
-                nn.Linear(64, self._out_dense)
+                nn.Linear(128, self._out_dense)
             )
 
 
