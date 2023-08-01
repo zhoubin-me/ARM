@@ -58,7 +58,7 @@ class Qattention3DNet(nn.Module):
         self.inp_proc = Conv3DBlock(10, emb_dim // 2, 1, 1)
         self.trans_proc = Conv3DBlock(emb_dim, emb_dim // 2, 1, 1)
 
-        self.post_proc = nn.Sequential(
+        self.trans_post_proc = nn.Sequential(
             Conv3DInceptionBlock(
                 emb_dim,
                 emb_dim,
@@ -106,8 +106,8 @@ class Qattention3DNet(nn.Module):
         rot_grip = y[:, :1]
         if self._out_dense > 0:
             x_rot_grip = self.inp_grip_proc(x_q)
-            x_rot_grip = rearrange(x_rot_grip, 'b c h w d -> b c (h w d)').squeeze(-1)
-            rot_grip = torch.cat([x_rot_grip, rot_grip], dim=1)
+            x_rot_grip = rearrange(x_rot_grip, 'b c h w d -> b (h w d) c')
+            rot_grip = torch.cat([x_rot_grip, rot_grip], dim=-1).squeeze(1)
             rot_grip = self.rot_grip_proc(rot_grip)
         else:
             rot_grip = None
@@ -120,10 +120,10 @@ class Qattention3DNet(nn.Module):
             p2=self._voxel_size, 
             p3=self._voxel_size)
         
-        trans_ = self.trans_proc(trans)
-        x_q = self.inp_proc(x_q)
-        trans = torch.cat([trans_, x_q], dim=1)
-        trans = self.post_proc(trans)
+        trans = self.trans_proc(trans)
+        x_trans = self.inp_proc(x_q)
+        trans = torch.cat([trans, x_trans], dim=1)
+        trans = self.trans_post_proc(trans)
         return trans, rot_grip
 
 
