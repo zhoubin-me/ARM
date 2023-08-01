@@ -98,10 +98,12 @@ class QFunction(nn.Module):
 
         # Swap to channels fist
         obs_voxel_grid = obs_voxel_grid.permute(0, 4, 1, 2, 3).detach()
+        q_voxel_grid = q_voxel_grid.permute(0, 4, 1, 2, 3).detach()
+
         q_trans, rot_and_grip_q = self._qnet.forward_encoder(obs_voxel_grid, proprio)
         q_trans = q_trans.unsqueeze(1)
         rot_and_grip_q = rot_and_grip_q.squeeze(1) if rot_and_grip_q is not None else None
-        return q_trans, rot_and_grip_q, q_voxel_grid.detach()
+        return q_trans, rot_and_grip_q, q_voxel_grid
 
     def latents(self):
         return {}
