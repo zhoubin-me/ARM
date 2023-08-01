@@ -110,7 +110,7 @@ class Qattention3DNet(nn.Module):
             p3=self._voxel_size)
         
         trans_ = self.trans_proc(trans)
-        x_ = self.inp_proc(x)
+        x_q = self.inp_proc(x_q)
         trans = torch.cat([trans_, x_q], dim=1)
         trans = self.post_proc(trans)
         return trans, rot
