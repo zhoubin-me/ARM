@@ -9,4 +9,5 @@ nvidia-persistenced/
 results/
 rlight.egg-info
 arm_test
+arm-test
 dset
