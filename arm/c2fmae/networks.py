@@ -85,11 +85,16 @@ class Qattention3DNet(nn.Module):
         )
 
         if self._out_dense > 0:
+            self.inp_grip_proc = nn.Sequential(
+                Conv3DBlock(10, emb_dim, self._voxel_size // 2, self._voxel_size // 2),
+                Conv3DBlock(emb_dim, emb_dim, self._voxel_size // 2, self._voxel_size // 2)
+            )
+
             self.rot_grip_proc = nn.Sequential(
-            DenseBlock(emb_dim, 128, activation='lrelu'),
-            DenseBlock(128, 128, activation='lrelu'),
-            DenseBlock(128, self._out_dense, activation=None)
-        )
+                DenseBlock(emb_dim * 2, 128, activation='lrelu'),
+                DenseBlock(128, 128, activation='lrelu'),
+                DenseBlock(128, self._out_dense, activation=None)
+            )
 
     def forward(self, x, proprio):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
@@ -99,7 +104,13 @@ class Qattention3DNet(nn.Module):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
         y, _, _ = self.mae.forward_encoder(x, proprio, 0.0)
         rot_grip = y[:, :1]
-        rot = self.rot_grip_proc(rot_grip) if self._out_dense > 0 else None
+        if self._out_dense > 0:
+            x_rot_grip = self.inp_grip_proc(x_q)
+            x_rot_grip = rearrange(x_rot_grip, 'b c h w d -> b c (h w d)').squeeze(-1)
+            rot_grip = torch.cat([x_rot_grip, rot_grip], dim=1)
+            rot_grip = self.rot_grip_proc(rot_grip)
+        else:
+            rot_grip = None
 
         trans = y[:, 2:]
         trans = rearrange(
@@ -113,6 +124,6 @@ class Qattention3DNet(nn.Module):
         x_q = self.inp_proc(x_q)
         trans = torch.cat([trans_, x_q], dim=1)
         trans = self.post_proc(trans)
-        return trans, rot
+        return trans, rot_grip
 
 
