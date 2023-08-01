@@ -101,7 +101,6 @@ class Qattention3DNet(nn.Module):
         rot_grip = y[:, :1]
         rot = self.rot_grip_proc(rot_grip) if self._out_dense > 0 else None
 
-        p = self._voxel_size
         trans = y[:, 2:]
         trans = rearrange(
             trans, 
