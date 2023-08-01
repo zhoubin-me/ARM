@@ -95,7 +95,7 @@ class Qattention3DNet(nn.Module):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
         return self.mae.forward(x, proprio)
 
-    def forward_encoder(self, x, proprio):
+    def forward_encoder(self, x, proprio, x_q):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
         y, _, _ = self.mae.forward_encoder(x, proprio, 0.0)
         rot_grip = y[:, :1]
@@ -111,7 +111,7 @@ class Qattention3DNet(nn.Module):
         
         trans_ = self.trans_proc(trans)
         x_ = self.inp_proc(x)
-        trans = torch.cat([trans_, x_], dim=1)
+        trans = torch.cat([trans_, x_q], dim=1)
         trans = self.post_proc(trans)
         return trans, rot
 
