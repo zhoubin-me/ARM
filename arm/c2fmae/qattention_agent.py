@@ -54,9 +54,9 @@ class QFunction(nn.Module):
                  q_rot[:, 1:2].argmax(-1),
                  q_rot[:, 2:3].argmax(-1),
                  q_rot_grip[:, -2:].argmax(-1, keepdim=True)], -1)
-        
+
         return coords, rot_and_grip_indicies
-    
+
     def forward_mae(self, x, proprio, pcd, bounds):
         # x will be list of list (list of [rgb, pcd])
         b = x[0][0].shape[0]
@@ -71,7 +71,7 @@ class QFunction(nn.Module):
 
         voxel_grid = self._voxel_grid.coords_to_bounding_voxel_grid(
             pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
-        
+
         voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
         loss, _, _ = self._qnet.forward(voxel_grid, proprio)
         return loss
@@ -91,7 +91,7 @@ class QFunction(nn.Module):
 
         voxel_grid = self._voxel_grid.coords_to_bounding_voxel_grid(
             pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
-        
+
         # Swap to channels fist
         voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
         q_trans, rot_and_grip_q = self._qnet.forward_encoder(voxel_grid, proprio)
@@ -321,7 +321,7 @@ class QAttentionAgent(Agent):
 
         obs, obs_tp1, pcd, pcd_tp1 = self._preprocess_inputs(replay_sample)
 
-        recons_loss = self._q.forward_mae(obs, proprio, pcd, bounds)
+        # recons_loss = self._q.forward_mae(obs, proprio, pcd, bounds)
 
         q, q_rot_grip, voxel_grid = self._q(
             obs, proprio, pcd, bounds,
@@ -359,7 +359,7 @@ class QAttentionAgent(Agent):
 
         loss_weights = utils.loss_weights(replay_sample, REPLAY_BETA)
         combined_delta = q_delta.mean(1)
-        total_loss = ((combined_delta + qreg_loss) * loss_weights).mean() + recons_loss
+        total_loss = ((combined_delta + qreg_loss) * loss_weights).mean()
 
         self._optimizer.zero_grad()
         total_loss.backward()
@@ -372,7 +372,7 @@ class QAttentionAgent(Agent):
             'q/max_qattention': chosen_trans_q1.max(1)[0].mean(),
             'losses/total_loss': total_loss,
             'losses/qreg': qreg_loss.mean(),
-            'losses/recons_loss': recons_loss,
+            # 'losses/recons_loss': recons_loss,
         }
         if with_rot_and_grip:
             self._summaries.update({
