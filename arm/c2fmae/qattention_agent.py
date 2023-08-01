@@ -23,13 +23,15 @@ class QFunction(nn.Module):
 
     def __init__(self,
                  unet_3d: nn.Module,
-                 voxel_grid: VoxelGrid,
+                 q_voxel_grid: VoxelGrid,
+                 obs_voxel_grid: VoxelGrid,
                  bounds_offset: float,
                  rotation_resolution: float,
                  device):
         super(QFunction, self).__init__()
         self._rotation_resolution = rotation_resolution
-        self._voxel_grid = voxel_grid
+        self._q_voxel_grid = q_voxel_grid
+        self._obs_voxel_grid = obs_voxel_grid
         self._bounds_offset = bounds_offset
         self._qnet = copy.deepcopy(unet_3d)
         self._qnet._dev = device
@@ -89,15 +91,17 @@ class QFunction(nn.Module):
             [p.permute(0, 2, 3, 1).reshape(b, -1, feat_size) for p in
              image_features], 1)
 
-        voxel_grid = self._voxel_grid.coords_to_bounding_voxel_grid(
+        obs_voxel_grid = self._obs_voxel_grid.coords_to_bounding_voxel_grid(
+            pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
+        q_voxel_grid = self._q_voxel_grid.coords_to_bounding_voxel_grid(
             pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
 
         # Swap to channels fist
-        voxel_grid = voxel_grid.permute(0, 4, 1, 2, 3).detach()
-        q_trans, rot_and_grip_q = self._qnet.forward_encoder(voxel_grid, proprio)
+        obs_voxel_grid = obs_voxel_grid.permute(0, 4, 1, 2, 3).detach()
+        q_trans, rot_and_grip_q = self._qnet.forward_encoder(obs_voxel_grid, proprio)
         q_trans = q_trans.unsqueeze(1)
         rot_and_grip_q = rot_and_grip_q.squeeze(1) if rot_and_grip_q is not None else None
-        return q_trans, rot_and_grip_q, voxel_grid
+        return q_trans, rot_and_grip_q, q_voxel_grid.detach()
 
     def latents(self):
         return {}
@@ -160,7 +164,7 @@ class QAttentionAgent(Agent):
         if device is None:
             device = torch.device('cpu')
 
-        vox_grid = VoxelGrid(
+        q_vox_grid = VoxelGrid(
             coord_bounds=self._coordinate_bounds,
             voxel_size=self._voxel_size,
             device=device,
@@ -169,7 +173,7 @@ class QAttentionAgent(Agent):
             max_num_coords=np.prod(self._image_resolution) * self._num_cameras,
         )
 
-        q_vox_grid = VoxelGrid(
+        obs_vox_grid = VoxelGrid(
             coord_bounds=self._coordinate_bounds,
             voxel_size=self._voxel_size * 8,
             device=device,
@@ -178,13 +182,18 @@ class QAttentionAgent(Agent):
             max_num_coords=np.prod(self._image_resolution) * self._num_cameras,
         )
 
-        self._vox_grid = vox_grid
-        self._q = QFunction(self._unet3d, q_vox_grid, self._bounds_offset,
+        self._vox_grid = q_vox_grid
+        self._q = QFunction(self._unet3d, 
+                            q_vox_grid, 
+                            obs_vox_grid, 
+                            self._bounds_offset,
                             self._rotation_resolution,
                             device).to(device).train(training)
         self._q_target = None
         if training:
-            self._q_target = QFunction(self._unet3d, q_vox_grid,
+            self._q_target = QFunction(self._unet3d, 
+                                       q_vox_grid,
+                                       obs_vox_grid,
                                        self._bounds_offset,
                                        self._rotation_resolution,
                                        device).to(
@@ -499,13 +508,13 @@ class QAttentionAgent(Agent):
         return summaries
 
     def act_summaries(self) -> List[Summary]:
-        return []
-        # return [
-        #     ImageSummary('%s/act_Qattention' % self._name,
-        #                  transforms.ToTensor()(visualise_voxel(
-        #                      self._act_voxel_grid.cpu().numpy(),
-        #                      self._act_qvalues.cpu().numpy(),
-        #                      self._act_max_coordinate.cpu().numpy())))]
+        # return []
+        return [
+            ImageSummary('%s/act_Qattention' % self._name,
+                         transforms.ToTensor()(visualise_voxel(
+                             self._act_voxel_grid.cpu().numpy(),
+                             self._act_qvalues.cpu().numpy(),
+                             self._act_max_coordinate.cpu().numpy())))]
 
     def load_weights(self, savedir: str):
         self._q.load_state_dict(

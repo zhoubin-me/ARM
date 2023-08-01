@@ -8,5 +8,5 @@ venv
 nvidia-persistenced/
 results/
 rlight.egg-info
-arm-test
+arm_test
 dset
