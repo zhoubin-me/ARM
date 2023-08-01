@@ -39,14 +39,14 @@ class Qattention3DNet(nn.Module):
         if self._build_calls != 1:
             raise RuntimeError('Build needs to be called once.')
         
-        emb_dim = 256
+        emb_dim = 128
         self.mae = MaskedAutoencoderViT(
             img_size=64,
             in_chans=self._in_channels,
             patch_size=8,
             embed_dim=emb_dim,
-            depth=8,
-            num_heads=8,
+            depth=4,
+            num_heads=4,
             decoder_embed_dim=emb_dim,
             decoder_depth=4,
             decoder_num_heads=8,
