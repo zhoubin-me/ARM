@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 
 from functools import partial
 
@@ -55,8 +55,7 @@ class Qattention3DNet(nn.Module):
         
         self.proprio_emb = nn.Linear(self._low_dim_size, emb_dim)
 
-        self.inp_proc = Conv3DBlock(10, emb_dim // 2, 1, 1)
-        self.trans_proc = Conv3DBlock(emb_dim, emb_dim // 2, 1, 1)
+        self.y_post_proc = nn.Linear(emb_dim * 2, emb_dim)
 
         self.trans_post_proc = nn.Sequential(
             Conv3DInceptionBlock(
@@ -85,13 +84,8 @@ class Qattention3DNet(nn.Module):
         )
 
         if self._out_dense > 0:
-            self.inp_grip_proc = nn.Sequential(
-                Conv3DBlock(10, emb_dim, self._voxel_size // 2, self._voxel_size // 2),
-                Conv3DBlock(emb_dim, emb_dim, self._voxel_size // 2, self._voxel_size // 2)
-            )
-
             self.rot_grip_proc = nn.Sequential(
-                DenseBlock(emb_dim * 2, 128, activation='lrelu'),
+                DenseBlock(emb_dim * 3, 128, activation='lrelu'),
                 DenseBlock(128, 128, activation='lrelu'),
                 DenseBlock(128, self._out_dense, activation=None)
             )
@@ -100,30 +94,29 @@ class Qattention3DNet(nn.Module):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
         return self.mae.forward(x, proprio)
 
-    def forward_encoder(self, x, proprio, x_q):
+    def forward_encoder(self, x, proprio):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
-        y, _, _ = self.mae.forward_encoder(x, proprio, 0.0)
-        rot_grip = y[:, :1]
-        if self._out_dense > 0:
-            x_rot_grip = self.inp_grip_proc(x_q)
-            x_rot_grip = rearrange(x_rot_grip, 'b c h w d -> b (h w d) c')
-            rot_grip = torch.cat([x_rot_grip, rot_grip], dim=-1).squeeze(1)
-            rot_grip = self.rot_grip_proc(rot_grip)
-        else:
-            rot_grip = None
+        y, _, _, x_patch = self.mae.forward_encoder(x, proprio, 0.0)
+        y_feat = torch.cat((y[:, 1:], x_patch), dim=-1)
+        y_feat = self.y_post_proc(y_feat)
 
-        trans = y[:, 2:]
         trans = rearrange(
-            trans, 
-            'b (p1 p2 p3) c -> b c p1 p2 p3', 
+            y_feat,
+            'b (p1 p2 p3) d -> b d p1 p2 p3', 
             p1=self._voxel_size, 
             p2=self._voxel_size, 
             p3=self._voxel_size)
-        
-        trans = self.trans_proc(trans)
-        x_trans = self.inp_proc(x_q)
-        trans = torch.cat([trans, x_trans], dim=1)
         trans = self.trans_post_proc(trans)
+
+        if self._out_dense > 0:
+            hm = F.softmax(y_feat, dim=1)
+            feat = torch.sum(hm * y_feat, dim=1)
+            low_feat = y_feat.max(dim=1)[0]
+            feat = torch.cat((feat, low_feat, y[:, 0]), dim=1)
+            rot_grip = self.rot_grip_proc(feat)
+        else:
+            rot_grip = None
+
         return trans, rot_grip
 
 

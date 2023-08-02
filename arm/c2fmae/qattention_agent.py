@@ -100,7 +100,7 @@ class QFunction(nn.Module):
         obs_voxel_grid = obs_voxel_grid.permute(0, 4, 1, 2, 3).detach()
         q_voxel_grid = q_voxel_grid.permute(0, 4, 1, 2, 3).detach()
 
-        q_trans, rot_and_grip_q = self._qnet.forward_encoder(obs_voxel_grid, proprio, q_voxel_grid)
+        q_trans, rot_and_grip_q = self._qnet.forward_encoder(obs_voxel_grid, proprio)
         return q_trans, rot_and_grip_q, q_voxel_grid
 
     def latents(self):
