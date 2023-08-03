@@ -65,28 +65,49 @@ class Qattention3DNet(nn.Module):
             ),
             Conv3DBlock(
                 emb_dim * 3,
-                1,
+                emb_dim,
                 1,
                 1,
             ),
-            # Conv3DInceptionBlock(
-            #     emb_dim,
-            #     emb_dim,
-            #     activation="lrelu",
-            #     residual=True,
-            # ),
-            # Conv3DBlock(
-            #     emb_dim * 2,
-            #     1,
-            #     padding=1,
-            # ),
+            Conv3DInceptionBlock(
+                emb_dim,
+                emb_dim,
+                activation="lrelu",
+                residual=True,
+            ),
+            Conv3DBlock(
+                emb_dim * 2,
+                1,
+                padding=1,
+            ),
         )
 
         if self._out_dense > 0:
             self.rot_grip_proc = nn.Sequential(
-                DenseBlock(emb_dim * 3, 128, activation='lrelu'),
-                # DenseBlock(128, 128, activation='lrelu'),
-                DenseBlock(128, self._out_dense, activation=None)
+                Conv3DInceptionBlock(
+                    emb_dim * 2,
+                    emb_dim,
+                    activation="lrelu",
+                    residual=True,
+                ),
+                Conv3DBlock(
+                    emb_dim * 3,
+                    emb_dim,
+                    1,
+                    1,
+                ),
+                Conv3DInceptionBlock(
+                    emb_dim,
+                    emb_dim,
+                    activation="lrelu",
+                    residual=True,
+                ),
+                Conv3DBlock(
+                    emb_dim * 2,
+                    self._out_dense,
+                    self._voxel_size,
+                    padding=0
+                ),
             )
 
     def forward(self, x, proprio):
@@ -108,11 +129,8 @@ class Qattention3DNet(nn.Module):
         trans_final = self.trans_post_proc(trans)
 
         if self._out_dense > 0:
-            trans_feat = rearrange(trans, 'b c d h w -> b c (d h w)')
-            hm = F.softmax(trans_feat, dim=-1)
-            feat = torch.sum(hm * trans_feat, dim=-1)
-            feat = torch.cat((feat, y_feat[:, 0]), dim=1)
-            rot_grip = self.rot_grip_proc(feat)
+            rot_grip = self.rot_grip_proc(trans)
+            rot_grip = rearrange(rot_grip, 'b c d h w -> b (c d h w)')
         else:
             rot_grip = None
 
