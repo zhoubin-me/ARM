@@ -18,6 +18,88 @@ import torch.nn as nn
 from timm.models.vision_transformer import PatchEmbed, Block
 from timm.layers.helpers import to_3tuple
 from einops import rearrange, repeat
+import numpy as np
+
+def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
+    assert embed_dim % 2 == 0
+
+    # use half of dimensions to encode grid_h
+    emb_h = get_1d_sincos_pos_embed_from_grid(
+        embed_dim // 2, grid[0]
+    )  # (H*W, D/2)
+    emb_w = get_1d_sincos_pos_embed_from_grid(
+        embed_dim // 2, grid[1]
+    )  # (H*W, D/2)
+
+    emb = np.concatenate([emb_h, emb_w], axis=1)  # (H*W, D)
+    return emb
+
+def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
+    """
+    embed_dim: output dimension for each position
+    pos: a list of positions to be encoded: size (M,)
+    out: (M, D)
+    """
+    assert embed_dim % 2 == 0
+    omega = np.arange(embed_dim // 2, dtype=float)
+    omega /= embed_dim / 2.0
+    omega = 1.0 / 10000**omega  # (D/2,)
+
+    pos = pos.reshape(-1)  # (M,)
+    out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
+
+    emb_sin = np.sin(out)  # (M, D/2)
+    emb_cos = np.cos(out)  # (M, D/2)
+
+    emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
+    return emb
+
+def get_3d_sincos_pos_embed(embed_dim, grid_size, t_size, cls_token=False):
+    """
+    grid_size: int of the grid height and width
+    t_size: int of the temporal size
+    return:
+    pos_embed: [t_size*grid_size*grid_size, embed_dim] or [1+t_size*grid_size*grid_size, embed_dim] (w/ or w/o cls_token)
+    """
+    assert embed_dim % 4 == 0
+    embed_dim_spatial = embed_dim // 4 * 3
+    embed_dim_temporal = embed_dim // 4
+
+    # spatial
+    grid_h = np.arange(grid_size, dtype=np.float32)
+    grid_w = np.arange(grid_size, dtype=np.float32)
+    grid = np.meshgrid(grid_w, grid_h)  # here w goes first
+    grid = np.stack(grid, axis=0)
+
+    grid = grid.reshape([2, 1, grid_size, grid_size])
+    pos_embed_spatial = get_2d_sincos_pos_embed_from_grid(
+        embed_dim_spatial, grid
+    )
+
+    # temporal
+    grid_t = np.arange(t_size, dtype=np.float32)
+    pos_embed_temporal = get_1d_sincos_pos_embed_from_grid(
+        embed_dim_temporal, grid_t
+    )
+
+    # concate: [T, H, W] order
+    pos_embed_temporal = pos_embed_temporal[:, np.newaxis, :]
+    pos_embed_temporal = np.repeat(
+        pos_embed_temporal, grid_size**2, axis=1
+    )  # [T, H*W, D // 4]
+    pos_embed_spatial = pos_embed_spatial[np.newaxis, :, :]
+    pos_embed_spatial = np.repeat(
+        pos_embed_spatial, t_size, axis=0
+    )  # [T, H*W, D // 4 * 3]
+
+    pos_embed = np.concatenate([pos_embed_temporal, pos_embed_spatial], axis=-1)
+    pos_embed = pos_embed.reshape([-1, embed_dim])  # [T*H*W, D]
+
+    if cls_token:
+        pos_embed = np.concatenate(
+            [np.zeros([1, embed_dim]), pos_embed], axis=0
+        )
+    return pos_embed
 
 class PatchEmbed(nn.Module):
     """ 2D Image to Patch Embedding
@@ -64,11 +146,13 @@ class MaskedAutoencoderViT(nn.Module):
         # MAE encoder specifics
         self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
         num_patches = self.patch_embed.num_patches
-        
+        self.emb_dim = embed_dim
+        self.grid_size = img_size // patch_size
+
         self.reduce_emb = nn.Linear(embed_dim * 2, embed_dim)
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.randn(1, num_patches + 1, embed_dim))  # fixed sin-cos embedding
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False)  # fixed sin-cos embedding
 
         self.blocks = nn.ModuleList([
             Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, qk_norm=None, norm_layer=norm_layer)
@@ -101,6 +185,8 @@ class MaskedAutoencoderViT(nn.Module):
         # initialize (and freeze) pos_embed by sin-cos embedding
         # pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.patch_embed.num_patches**.5), cls_token=True)
         # self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+        pos_embed = get_3d_sincos_pos_embed(self.emb_dim, self.grid_size, self.grid_size, cls_token=True)
+        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # decoder_pos_embed = get_2d_sincos_pos_embed(self.decoder_pos_embed.shape[-1], int(self.patch_embed.num_patches**.5), cls_token=True)
         # self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
