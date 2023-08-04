@@ -6,7 +6,7 @@ from functools import partial
 
 from arm.c2fmae.mae import MaskedAutoencoderViT
 from einops import rearrange
-from arm.network_utils import DenseBlock, Conv3DBlock, Conv3DInceptionBlock 
+from arm.network_utils import DenseBlock, Conv3DBlock, Conv3DInceptionBlock, Conv2DUpsampleBlock, Conv2DBlock
 
 
 class Qattention3DNet(nn.Module):
@@ -41,7 +41,7 @@ class Qattention3DNet(nn.Module):
         
         emb_dim = 128
         self.mae = MaskedAutoencoderViT(
-            img_size=64,
+            img_size=128,
             in_chans=self._in_channels,
             patch_size=8,
             embed_dim=emb_dim,
@@ -54,17 +54,21 @@ class Qattention3DNet(nn.Module):
             norm_layer=partial(nn.LayerNorm, eps=1e-6))
         
         self.proprio_emb = nn.Linear(self._low_dim_size, emb_dim)
-        self.x_q_emb = nn.Conv3d(self._in_channels, emb_dim, 1, 1)
+        self.img_emb = nn.Conv2d(self._in_channels, emb_dim, 1, 1)
+        self.img_up = Conv2DUpsampleBlock(emb_dim, emb_dim, 1, 8)
+        self.img_down = Conv2DBlock(emb_dim * 2, self._in_channels, 3, 1)
 
-        self.trans_post_proc = nn.Sequential(
+        emb_dim = 64
+        self.translation_head = nn.Sequential(
+            nn.Conv3d(10, emb_dim, 1, 1),
             Conv3DInceptionBlock(
-                emb_dim * 2,
+                emb_dim,
                 emb_dim,
                 activation="lrelu",
                 residual=True,
             ),
             Conv3DBlock(
-                emb_dim * 3,
+                emb_dim * 2,
                 emb_dim,
                 1,
                 1,
@@ -82,58 +86,57 @@ class Qattention3DNet(nn.Module):
             ),
         )
 
-        if self._out_dense > 0:
-            self.rot_grip_proc = nn.Sequential(
-                Conv3DInceptionBlock(
-                    emb_dim * 2,
-                    emb_dim,
-                    activation="lrelu",
-                    residual=True,
-                ),
-                Conv3DBlock(
-                    emb_dim * 3,
-                    emb_dim,
-                    1,
-                    1,
-                ),
-                Conv3DInceptionBlock(
-                    emb_dim,
-                    emb_dim,
-                    activation="lrelu",
-                    residual=True,
-                ),
-                Conv3DBlock(
-                    emb_dim * 2,
-                    self._out_dense,
-                    self._voxel_size,
-                    padding=0
-                ),
-            )
+        self.rot_grip_head = nn.Sequential(
+            nn.Conv3d(10, emb_dim, 1, 1),
+            Conv3DInceptionBlock(
+                emb_dim,
+                emb_dim,
+                activation="lrelu",
+                residual=True,
+            ),
+            Conv3DBlock(
+                emb_dim * 2,
+                emb_dim,
+                1,
+                1,
+            ),
+            Conv3DInceptionBlock(
+                emb_dim,
+                emb_dim,
+                activation="lrelu",
+                residual=True,
+            ),
+            Conv3DBlock(
+                emb_dim * 2,
+                self._out_dense,
+                16,
+                16,
+                padding=0
+            ),
+        )    
 
     def forward(self, x, proprio):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
         return self.mae.forward(x, proprio)
 
-    def forward_encoder(self, x, proprio, x_q):
+    def forward_encoder(self, imgs, proprio):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
-        x_q = self.x_q_emb(x_q)
-        y_feat, _, _ = self.mae.forward_encoder(x, proprio, 0.0)
+        feat, _, _ = self.mae.forward_encoder(imgs, proprio, 0.0)
+        img_emb = self.img_emb(imgs)
 
-        trans = rearrange(
-            y_feat[:, 1:],
-            'b (p1 p2 p3) d -> b d p1 p2 p3', 
-            p1=self._voxel_size,
-            p2=self._voxel_size,
-            p3=self._voxel_size)
-        trans = torch.cat((trans, x_q), dim=1)
-        trans_final = self.trans_post_proc(trans)
+        feat = rearrange(
+            feat[:, 1:],
+            'b (p1 p2) d -> b d p1 p2', 
+            p1=16,
+            p2=16)
+        
+        feat = self.img_up(feat)
+        feat = torch.cat((feat, img_emb), dim=1)
+        feat = self.img_down(feat)
+        return feat
 
-        if self._out_dense > 0:
-            rot_grip = self.rot_grip_proc(trans)
-            rot_grip = rearrange(rot_grip, 'b c d h w -> b (c d h w)')
-        else:
-            rot_grip = None
+    def forward_head(self, voxel_grid):
+        translation = self.translation_head(voxel_grid)
+        rot_grip = self.rot_grip_head(voxel_grid)
 
-        return trans_final, rot_grip
-
-
+        return translation, rot_grip

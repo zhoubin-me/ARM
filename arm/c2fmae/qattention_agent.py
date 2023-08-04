@@ -14,6 +14,7 @@ from yarr.agents.agent import Agent, ActResult, ScalarSummary, \
 from arm import utils
 from arm.utils import visualise_voxel, stack_on_channel
 from arm.c2fmae.voxel_grid import VoxelGrid
+from einops import rearrange
 
 NAME = 'QAttentionAgent'
 REPLAY_BETA = 1.0
@@ -24,14 +25,12 @@ class QFunction(nn.Module):
     def __init__(self,
                  unet_3d: nn.Module,
                  q_voxel_grid: VoxelGrid,
-                 obs_voxel_grid: VoxelGrid,
                  bounds_offset: float,
                  rotation_resolution: float,
                  device):
         super(QFunction, self).__init__()
         self._rotation_resolution = rotation_resolution
         self._q_voxel_grid = q_voxel_grid
-        self._obs_voxel_grid = obs_voxel_grid
         self._bounds_offset = bounds_offset
         self._qnet = copy.deepcopy(unet_3d)
         self._qnet._dev = device
@@ -85,22 +84,16 @@ class QFunction(nn.Module):
         pcd_flat = torch.cat(
             [p.permute(0, 2, 3, 1).reshape(b, -1, 3) for p in pcd], 1)
 
-        image_features = [xx[0] for xx in x]
-        feat_size = image_features[0].shape[1]
-        flat_imag_features = torch.cat(
-            [p.permute(0, 2, 3, 1).reshape(b, -1, feat_size) for p in
-             image_features], 1)
+        image_features = [self._qnet.forward_encoder(xx[0], proprio) for xx in x]
+        image_features = [rearrange(p, 'b c h w -> b (h w) c') for p in image_features]
+        flat_imag_features = torch.cat(image_features, 1)
 
-        obs_voxel_grid = self._obs_voxel_grid.coords_to_bounding_voxel_grid(
-            pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
         q_voxel_grid = self._q_voxel_grid.coords_to_bounding_voxel_grid(
             pcd_flat, coord_features=flat_imag_features, coord_bounds=bounds)
 
         # Swap to channels fist
-        obs_voxel_grid = obs_voxel_grid.permute(0, 4, 1, 2, 3).detach()
         q_voxel_grid = q_voxel_grid.permute(0, 4, 1, 2, 3).detach()
-
-        q_trans, rot_and_grip_q = self._qnet.forward_encoder(obs_voxel_grid, proprio, q_voxel_grid)
+        q_trans, rot_and_grip_q = self._qnet.forward_head(q_voxel_grid)
         return q_trans, rot_and_grip_q, q_voxel_grid
 
     def latents(self):
@@ -173,19 +166,10 @@ class QAttentionAgent(Agent):
             max_num_coords=np.prod(self._image_resolution) * self._num_cameras,
         )
 
-        obs_vox_grid = VoxelGrid(
-            coord_bounds=self._coordinate_bounds,
-            voxel_size=self._voxel_size * 8,
-            device=device,
-            batch_size=self._batch_size if training else 1,
-            feature_size=self._voxel_feature_size,
-            max_num_coords=np.prod(self._image_resolution) * self._num_cameras,
-        )
 
         self._vox_grid = q_vox_grid
         self._q = QFunction(self._unet3d, 
                             q_vox_grid, 
-                            obs_vox_grid, 
                             self._bounds_offset,
                             self._rotation_resolution,
                             device).to(device).train(training)
@@ -193,7 +177,6 @@ class QAttentionAgent(Agent):
         if training:
             self._q_target = QFunction(self._unet3d, 
                                        q_vox_grid,
-                                       obs_vox_grid,
                                        self._bounds_offset,
                                        self._rotation_resolution,
                                        device).to(
