@@ -282,7 +282,6 @@ class MaskedAutoencoderViT(nn.Module):
         # embed patches
         x = self.patch_embed(x)
         proprio = repeat(proprio, 'b l d -> b (n l) d', n=self.patch_embed.num_patches)
-        print(x.shape, proprio.shape)
         x = torch.cat((x, proprio), dim=-1)
         x = self.reduce_emb(x)
         # add pos embed w/o cls token
