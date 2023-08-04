@@ -38,11 +38,11 @@ class Qattention3DNet(nn.Module):
         self._build_calls += 1
         if self._build_calls != 1:
             raise RuntimeError('Build needs to be called once.')
-        
+
         emb_dim = 128
         self.mae = MaskedAutoencoderViT(
             img_size=128,
-            in_chans=self._in_channels,
+            in_chans=3,
             patch_size=8,
             embed_dim=emb_dim,
             depth=4,
@@ -52,7 +52,7 @@ class Qattention3DNet(nn.Module):
             decoder_num_heads=8,
             mlp_ratio=4,
             norm_layer=partial(nn.LayerNorm, eps=1e-6))
-        
+
         self.proprio_emb = nn.Linear(self._low_dim_size, emb_dim)
         self.img_emb = nn.Conv2d(self._in_channels, emb_dim, 1, 1)
         self.img_up = Conv2DUpsampleBlock(emb_dim, emb_dim, 1, 8)
@@ -113,7 +113,7 @@ class Qattention3DNet(nn.Module):
                 16,
                 padding=0
             ),
-        )    
+        )
 
     def forward(self, x, proprio):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
@@ -126,10 +126,10 @@ class Qattention3DNet(nn.Module):
 
         feat = rearrange(
             feat[:, 1:],
-            'b (p1 p2) d -> b d p1 p2', 
+            'b (p1 p2) d -> b d p1 p2',
             p1=16,
             p2=16)
-        
+
         feat = self.img_up(feat)
         feat = torch.cat((feat, img_emb), dim=1)
         feat = self.img_down(feat)
