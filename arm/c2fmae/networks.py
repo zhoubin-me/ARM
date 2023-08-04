@@ -54,11 +54,12 @@ class Qattention3DNet(nn.Module):
             norm_layer=partial(nn.LayerNorm, eps=1e-6))
 
         self.proprio_emb = nn.Linear(self._low_dim_size, emb_dim)
-        self.img_emb = nn.Conv2d(self._in_channels, emb_dim, 1, 1)
+        self.img_emb = nn.Conv2d(3, emb_dim, 1, 1)
         self.img_up = Conv2DUpsampleBlock(emb_dim, emb_dim, 1, 8)
         self.img_down = Conv2DBlock(emb_dim * 2, self._in_channels, 3, 1)
 
         emb_dim = 64
+
         self.translation_head = nn.Sequential(
             nn.Conv3d(10, emb_dim, 1, 1),
             Conv3DInceptionBlock(
@@ -86,34 +87,35 @@ class Qattention3DNet(nn.Module):
             ),
         )
 
-        self.rot_grip_head = nn.Sequential(
-            nn.Conv3d(10, emb_dim, 1, 1),
-            Conv3DInceptionBlock(
-                emb_dim,
-                emb_dim,
-                activation="lrelu",
-                residual=True,
-            ),
-            Conv3DBlock(
-                emb_dim * 2,
-                emb_dim,
-                1,
-                1,
-            ),
-            Conv3DInceptionBlock(
-                emb_dim,
-                emb_dim,
-                activation="lrelu",
-                residual=True,
-            ),
-            Conv3DBlock(
-                emb_dim * 2,
-                self._out_dense,
-                16,
-                16,
-                padding=0
-            ),
-        )
+        if self._out_dense > 0:
+            self.rot_grip_head = nn.Sequential(
+                nn.Conv3d(10, emb_dim, 1, 1),
+                Conv3DInceptionBlock(
+                    emb_dim,
+                    emb_dim,
+                    activation="lrelu",
+                    residual=True,
+                ),
+                Conv3DBlock(
+                    emb_dim * 2,
+                    emb_dim,
+                    1,
+                    1,
+                ),
+                Conv3DInceptionBlock(
+                    emb_dim,
+                    emb_dim,
+                    activation="lrelu",
+                    residual=True,
+                ),
+                Conv3DBlock(
+                    emb_dim * 2,
+                    self._out_dense,
+                    16,
+                    16,
+                    padding=0
+                ),
+            )
 
     def forward(self, x, proprio):
         proprio = self.proprio_emb(proprio).unsqueeze(1)
@@ -137,6 +139,9 @@ class Qattention3DNet(nn.Module):
 
     def forward_head(self, voxel_grid):
         translation = self.translation_head(voxel_grid)
-        rot_grip = self.rot_grip_head(voxel_grid)
-
+        if self._out_dense > 0:
+            rot_grip = self.rot_grip_head(voxel_grid)
+            rot_grip = rearrange(rot_grip, 'b c d h w -> b (c d h w)')
+        else:
+            rot_grip = None
         return translation, rot_grip
