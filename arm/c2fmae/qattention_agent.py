@@ -226,7 +226,7 @@ class QAttentionAgent(Agent):
         pcds, pcds_tp1 = [], []
         self._crop_summary, self._crop_summary_tp1 = [], []
         for n in self._camera_names:
-            if False and self._layer > 0 and 'wrist' not in n:
+            if self._layer > 0 and 'wrist' not in n:
                 pc_t = replay_sample['%s_pixel_coord' % n]
                 pc_tp1 = replay_sample['%s_pixel_coord_tp1' % n]
                 rgb = self._extract_crop(pc_t, replay_sample['%s_rgb' % n])
@@ -253,7 +253,7 @@ class QAttentionAgent(Agent):
     def _act_preprocess_inputs(self, observation):
         obs, pcds = [], []
         for n in self._camera_names:
-            if False and self._layer > 0 and 'wrist' not in n:
+            if self._layer > 0 and 'wrist' not in n:
                 pc_t = observation['%s_pixel_coord' % n]
                 rgb = self._extract_crop(pc_t, observation['%s_rgb' % n])
                 pcd = self._extract_crop(pc_t, observation['%s_point_cloud' % n])

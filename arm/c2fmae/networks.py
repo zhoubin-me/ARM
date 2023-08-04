@@ -40,10 +40,12 @@ class Qattention3DNet(nn.Module):
             raise RuntimeError('Build needs to be called once.')
 
         emb_dim = 128
+        patch_size = 4 if self._dense_feats > 0 else 8
+        img_size = 128 if self._dense_feats > 0 else 64
         self.mae = MaskedAutoencoderViT(
-            img_size=128,
+            img_size=img_size,
             in_chans=3,
-            patch_size=8,
+            patch_size=patch_size,
             embed_dim=emb_dim,
             depth=4,
             num_heads=4,
